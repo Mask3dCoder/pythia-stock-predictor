@@ -29,6 +29,8 @@ uvicorn>=0.21.0
 # Utilities
 python-dotenv>=1.0.0
 joblib>=1.2.0
+rich>=13.0.0
+inquirer>=3.0.0
 
 # Testing
 pytest>=7.0.0
