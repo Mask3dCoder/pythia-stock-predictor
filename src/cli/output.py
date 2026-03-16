@@ -35,9 +35,9 @@ _custom_theme = Theme({
     "negative": "red",
     "neutral": "yellow",
     
-    # Symbol indicators
-    "up": "▲",
-    "down": "▼",
+    # Symbol indicators - use colors, not symbols in theme
+    "up": "green",
+    "down": "red",
 })
 
 # Global console instance
