@@ -182,8 +182,15 @@ class EnsembleModel:
         if total_weight > 0:
             weights_used = {k: v / total_weight for k, v in weights_used.items()}
         else:
-            logger.warning("No models available for prediction")
-            return {'predictions': np.zeros(steps), 'details': {}}
+            # FIX: Raise exception instead of returning silent zeros
+            error_msg = (
+                "No models available for prediction. All models failed during prediction. "
+                f"Attempted models: arima={bool(self.models.get('arima') and self.models['arima'].results is not None)}, "
+                f"lstm={bool(self.models.get('lstm') and self.models['lstm'].model is not None)}, "
+                f"gru={bool(self.models.get('gru') and self.models['gru'].model is not None)}"
+            )
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
         
         # Calculate weighted average
         ensemble_predictions = np.zeros(steps)

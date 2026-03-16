@@ -346,6 +346,142 @@ class DataPreprocessor:
         
         return df
     
+    def add_stochastic(
+        self,
+        df: pd.DataFrame,
+        period: int = 14,
+        smooth_k: int = 3,
+        smooth_d: int = 3
+    ) -> pd.DataFrame:
+        """
+        Add Stochastic Oscillator (%K and %D).
+        
+        Args:
+            df: DataFrame with stock data
+            period: Stochastic period
+            smooth_k: Smoothing period for %K
+            smooth_d: Smoothing period for %D
+            
+        Returns:
+            DataFrame with Stochastic indicators
+        """
+        df = df.copy()
+        
+        # Calculate %K
+        low_min = df['low'].rolling(window=period).min()
+        high_max = df['high'].rolling(window=period).max()
+        
+        df['stoch_k'] = 100 * (df['close'] - low_min) / (high_max - low_min)
+        
+        # Smooth %K to get %D
+        df['stoch_k'] = df['stoch_k'].rolling(window=smooth_k).mean()
+        df['stoch_d'] = df['stoch_k'].rolling(window=smooth_d).mean()
+        
+        logger.info(f"Added Stochastic Oscillator (period={period})")
+        
+        return df
+    
+    def add_williams_r(
+        self,
+        df: pd.DataFrame,
+        period: int = 14
+    ) -> pd.DataFrame:
+        """
+        Add Williams %R indicator.
+        
+        Args:
+            df: DataFrame with stock data
+            period: Williams %R period
+            
+        Returns:
+            DataFrame with Williams %R
+        """
+        df = df.copy()
+        
+        high_max = df['high'].rolling(window=period).max()
+        low_min = df['low'].rolling(window=period).min()
+        
+        df['williams_r'] = -100 * (high_max - df['close']) / (high_max - low_min)
+        
+        logger.info(f"Added Williams %R (period={period})")
+        
+        return df
+    
+    def add_cci(
+        self,
+        df: pd.DataFrame,
+        period: int = 20
+    ) -> pd.DataFrame:
+        """
+        Add Commodity Channel Index (CCI) indicator.
+        
+        Args:
+            df: DataFrame with stock data
+            period: CCI period
+            
+        Returns:
+            DataFrame with CCI
+        """
+        df = df.copy()
+        
+        # Typical Price
+        tp = (df['high'] + df['low'] + df['close']) / 3
+        
+        # Simple Moving Average of Typical Price
+        sma_tp = tp.rolling(window=period).mean()
+        
+        # Mean Deviation
+        mad = tp.rolling(window=period).apply(lambda x: np.abs(x - x.mean()).mean())
+        
+        df['cci'] = (tp - sma_tp) / (0.015 * mad)
+        
+        logger.info(f"Added CCI (period={period})")
+        
+        return df
+    
+    def add_adx(
+        self,
+        df: pd.DataFrame,
+        period: int = 14
+    ) -> pd.DataFrame:
+        """
+        Add Average Directional Index (ADX) indicator.
+        
+        Args:
+            df: DataFrame with stock data
+            period: ADX period
+            
+        Returns:
+            DataFrame with ADX, +DI, -DI
+        """
+        df = df.copy()
+        
+        # Calculate +DM and -DM
+        high_diff = df['high'].diff()
+        low_diff = -df['low'].diff()
+        
+        plus_dm = high_diff.where((high_diff > low_diff) & (high_diff > 0), 0)
+        minus_dm = low_diff.where((low_diff > high_diff) & (low_diff > 0), 0)
+        
+        # Calculate ATR
+        atr = df[f'atr_{period}'] if f'atr_{period}' in df.columns else self.add_atr(df, period)[f'atr_{period}']
+        
+        # Calculate +DI and -DI
+        plus_di = 100 * (plus_dm.ewm(span=period).mean() / atr)
+        minus_di = 100 * (minus_dm.ewm(span=period).mean() / atr)
+        
+        # Calculate DX
+        dx = 100 * np.abs(plus_di - minus_di) / (plus_di + minus_di)
+        
+        # Calculate ADX
+        df['adx'] = dx.ewm(span=period).mean()
+        df['adx_plus_di'] = plus_di
+        df['adx_minus_di'] = minus_di
+        
+        logger.info(f"Added ADX (period={period})")
+        
+        return df
+    
     def add_all_indicators(
         self,
         df: pd.DataFrame,
@@ -375,6 +511,10 @@ class DataPreprocessor:
         macd_signal = config.get('macd_signal', 9)
         bb_period = config.get('bollinger_period', 20)
         bb_std = config.get('bollinger_std', 2)
+        stoch_period = config.get('stochastic_period', 14)
+        williams_period = config.get('williams_period', 14)
+        cci_period = config.get('cci_period', 20)
+        adx_period = config.get('adx_period', 14)
         
         # Add indicators
         df = self.add_sma(df, sma_windows)
@@ -384,6 +524,12 @@ class DataPreprocessor:
         df = self.add_bollinger_bands(df, bb_period, bb_std)
         df = self.add_atr(df)
         df = self.add_obv(df)
+        
+        # Add new advanced indicators
+        df = self.add_stochastic(df, stoch_period)
+        df = self.add_williams_r(df, williams_period)
+        df = self.add_cci(df, cci_period)
+        df = self.add_adx(df, adx_period)
         
         # Add price changes
         df['price_change'] = df['close'].pct_change()

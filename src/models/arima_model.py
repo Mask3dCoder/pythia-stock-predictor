@@ -30,9 +30,78 @@ class ARIMAModel:
         self.order = self.config.get('order', [5, 1, 0])
         self.seasonal_order = self.config.get('seasonal_order', [0, 0, 0, 0])
         
+        # Auto-fit configuration
+        self.auto_fit = self.config.get('auto_fit', False)
+        self.max_p = self.config.get('max_p', 5)
+        self.max_d = self.config.get('max_d', 2)
+        self.max_q = self.config.get('max_q', 5)
+        
         self.model = None
         self.results = None
         self.scaler = None
+        self._is_stationary = None
+    
+    def check_stationarity(self, data: pd.Series) -> Tuple[bool, float]:
+        """
+        Check if time series is stationary using Augmented Dickey-Fuller test.
+        
+        Args:
+            data: Time series data
+            
+        Returns:
+            Tuple of (is_stationary, p_value)
+        """
+        try:
+            from statsmodels.tsa.stattools import adfuller
+            
+            result = adfuller(data.dropna(), autolag='AIC')
+            p_value = result[1]
+            is_stationary = p_value < 0.05
+            
+            logger.info(f"ADF test: p-value={p_value:.4f}, stationary={is_stationary}")
+            return is_stationary, p_value
+            
+        except Exception as e:
+            logger.warning(f"Could not perform ADF test: {e}")
+            return False, 1.0
+    
+    def auto_select_parameters(self, data: pd.Series) -> Tuple[Tuple, float]:
+        """
+        Automatically select best ARIMA parameters using AIC.
+        
+        Args:
+            data: Time series data
+            
+        Returns:
+            Tuple of (best_order, best_aic)
+        """
+        from statsmodels.tsa.arima.model import ARIMA
+        import warnings
+        
+        warnings.filterwarnings('ignore')
+        
+        best_aic = float('inf')
+        best_order = tuple(self.order)
+        
+        logger.info(f"Starting auto-ARIMA parameter search (p<={self.max_p}, d<={self.max_d}, q<={self.max_q})...")
+        
+        for p in range(self.max_p + 1):
+            for d in range(self.max_d + 1):
+                for q in range(self.max_q + 1):
+                    try:
+                        model = ARIMA(data.values, order=(p, d, q))
+                        results = model.fit()
+                        
+                        if results.aic < best_aic:
+                            best_aic = results.aic
+                            best_order = (p, d, q)
+                            logger.debug(f"New best: order={best_order}, AIC={best_aic:.2f}")
+                            
+                    except Exception:
+                        continue
+        
+        logger.info(f"Best ARIMA order: {best_order} with AIC: {best_aic:.2f}")
+        return best_order, best_aic
         
     def fit(self, data: pd.Series, order: Optional[Tuple] = None) -> 'ARIMAModel':
         """
@@ -48,9 +117,17 @@ class ARIMAModel:
         try:
             from statsmodels.tsa.arima.model import ARIMA
             
-            if order is None:
+            # Check stationarity and apply differencing if needed
+            is_stationary, p_value = self.check_stationarity(data)
+            self._is_stationary = is_stationary
+            
+            # Use auto-fit if enabled or if no order provided
+            if self.auto_fit or order is None:
+                order, aic = self.auto_select_parameters(data)
+                logger.info(f"Auto-selected ARIMA order: {order}")
+            elif order is None:
                 order = tuple(self.order)
-                
+            
             logger.info(f"Fitting ARIMA model with order={order}")
             
             # Scale data for better results
@@ -61,6 +138,9 @@ class ARIMAModel:
             # Fit model
             self.model = ARIMA(scaled_data, order=order)
             self.results = self.model.fit()
+            
+            # Store the order used
+            self.order = list(order)
             
             logger.info(f"ARIMA model fitted successfully")
             

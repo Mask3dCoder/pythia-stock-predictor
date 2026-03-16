@@ -428,6 +428,12 @@ def create_parser() -> argparse.ArgumentParser:
         metavar='FILE',
         help='Path to configuration file (default: config.yaml)'
     )
+    global_group.add_argument(
+        '-i', '--interactive',
+        action='store_true',
+        dest='interactive',
+        help='Run in interactive mode with guided prompts'
+    )
     
     # Create subparsers
     subparsers = parser.add_subparsers(
@@ -884,6 +890,174 @@ def create_parser() -> argparse.ArgumentParser:
 
 # ============== Main Entry Point ==============
 
+def run_interactive(config: dict) -> int:
+    """Run CLI in interactive mode with guided prompts."""
+    from src.cli.output import print_header, print_success, print_error, print_info
+    
+    print_header("Welcome to Pythia Stock Predictor - Interactive Mode")
+    print_info("This guided mode will help you through the prediction workflow.\n")
+    
+    # Step 1: Choose action
+    print_info("Available actions:")
+    print_info("  1. Collect data - Download historical stock data")
+    print_info("  2. Train model - Train a prediction model")
+    print_info("  3. Make predictions - Generate price predictions")
+    print_info("  4. Run dashboard - Launch the visualization dashboard")
+    print_info("  5. Analyze sentiment - Analyze market sentiment")
+    print_info("  6. Full workflow - Complete prediction pipeline")
+    print_info("  0. Exit - Exit interactive mode\n")
+    
+    while True:
+        try:
+            choice = input("Enter your choice (0-6): ").strip()
+            
+            if choice == '0':
+                print_info("Exiting interactive mode. Goodbye!")
+                return 0
+            
+            elif choice == '1':
+                # Collect data
+                symbol = input("Enter stock symbol (e.g., AAPL): ").strip().upper()
+                years = input("Enter number of years of data [1-10]: ").strip() or "5"
+                
+                # Create mock args namespace
+                class Args:
+                    pass
+                args = Args()
+                args.symbol = symbol
+                args.years = int(years)
+                args.source = 'yfinance'
+                args.interactive = True
+                
+                collect_data(args, config)
+                
+            elif choice == '2':
+                # Train model
+                symbol = input("Enter stock symbol (e.g., AAPL): ").strip().upper()
+                model = input("Enter model type [arima/lstm/gru/ensemble]: ").strip().lower() or "ensemble"
+                
+                class Args:
+                    pass
+                args = Args()
+                args.symbol = symbol
+                args.model = model
+                args.epochs = 50
+                args.save = True
+                args.interactive = True
+                
+                train_model(args, config)
+                
+            elif choice == '3':
+                # Make predictions
+                symbol = input("Enter stock symbol (e.g., AAPL): ").strip().upper()
+                model = input("Enter model type [arima/lstm/gru/ensemble]: ").strip().lower() or "ensemble"
+                days = input("Enter number of days to predict [1-90]: ").strip() or "7"
+                
+                class Args:
+                    pass
+                args = Args()
+                args.symbol = symbol
+                args.model = model
+                args.days = int(days)
+                args.interactive = True
+                
+                make_predictions(args, config)
+                
+            elif choice == '4':
+                # Run dashboard
+                symbol = input("Enter stock symbol (e.g., AAPL): ").strip().upper()
+                
+                class Args:
+                    pass
+                args = Args()
+                args.symbol = symbol
+                args.model = "ensemble"
+                args.port = 8501
+                args.interactive = True
+                
+                run_dashboard(args, config)
+                
+            elif choice == '5':
+                # Sentiment analysis
+                text = input("Enter text to analyze (or press Enter for sample): ").strip()
+                if not text:
+                    text = "Stock market shows positive trends today with strong tech sector performance."
+                
+                class Args:
+                    pass
+                args = Args()
+                args.text = text
+                args.method = "vader"
+                args.interactive = True
+                
+                analyze_sentiment(args, config)
+                
+            elif choice == '6':
+                # Full workflow
+                symbol = input("Enter stock symbol (e.g., AAPL): ").strip().upper()
+                years = input("Enter number of years of data [1-10]: ").strip() or "5"
+                model = input("Enter model type [arima/lstm/gru/ensemble]: ").strip().lower() or "ensemble"
+                days = input("Enter number of days to predict [1-90]: ").strip() or "7"
+                
+                print_info("\n" + "="*50)
+                print_header(f"Starting Full Workflow for {symbol}")
+                print_info("="*50 + "\n")
+                
+                # Step 1: Collect
+                print_info("Step 1/3: Collecting data...")
+                class Args1:
+                    pass
+                args1 = Args1()
+                args1.symbol = symbol
+                args1.years = int(years)
+                args1.source = 'yfinance'
+                args1.interactive = True
+                collect_data(args1, config)
+                
+                # Step 2: Train
+                print_info("Step 2/3: Training model...")
+                class Args2:
+                    pass
+                args2 = Args2()
+                args2.symbol = symbol
+                args2.model = model
+                args2.epochs = 50
+                args2.save = True
+                args2.interactive = True
+                train_model(args2, config)
+                
+                # Step 3: Predict
+                print_info("Step 3/3: Making predictions...")
+                class Args3:
+                    pass
+                args3 = Args3()
+                args3.symbol = symbol
+                args3.model = model
+                args3.days = int(days)
+                args3.interactive = True
+                make_predictions(args3, config)
+                
+                print_success("\nFull workflow completed!")
+                
+            else:
+                print_error("Invalid choice. Please enter a number between 0 and 6.")
+                continue
+            
+            # Ask if user wants to continue
+            print_info("\n" + "-"*50)
+            continue_choice = input("Would you like to perform another action? (y/n): ").strip().lower()
+            if continue_choice not in ('y', 'yes'):
+                print_info("Exiting interactive mode. Goodbye!")
+                return 0
+                
+        except KeyboardInterrupt:
+            print_info("\n\nOperation cancelled. Exiting interactive mode.")
+            return 130
+        except Exception as e:
+            print_error(f"Error: {e}")
+            print_info("Please try again.")
+
+
 def main() -> int:
     """Main entry point."""
     global VERBOSE_MODE
@@ -895,10 +1069,17 @@ def main() -> int:
     parser = create_parser()
     args = parser.parse_args()
     
+    # Handle interactive mode
+    if args.interactive:
+        print_welcome()
+        config = load_config(args.config)
+        return run_interactive(config)
+    
     # Show welcome message if no command
     if args.command is None:
         print_welcome()
         parser.print_help()
+        print_info("\nTip: Use --interactive or -i for guided mode!")
         return 0
     
     # Handle verbose mode

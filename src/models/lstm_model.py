@@ -58,58 +58,54 @@ class LSTMModel:
         Returns:
             Self
         """
+        # Import TensorFlow
+        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # Suppress TF warnings
+        
         try:
-            # Import TensorFlow
-            os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # Suppress TF warnings
-            
             import tensorflow as tf
             from tensorflow.keras.models import Sequential
             from tensorflow.keras.layers import LSTM, Dense, Dropout
-        except (ImportError, ModuleNotFoundError) as e:
+        except ImportError as e:
             logger.error(f"TensorFlow not available: {e}")
             raise ImportError(
                 "TensorFlow is not available or not compatible with your Python version. "
                 "Please install TensorFlow: pip install tensorflow "
                 "Note: TensorFlow may not be compatible with Python 3.13. "
                 "Consider using Python 3.9-3.11 or use ARIMA model instead."
-            )
-            
-            # Build model
-            self.model = Sequential()
-            
-            # First LSTM layer
-            self.model.add(LSTM(
-                units=self.lstm_units[0],
-                return_sequences=True,
-                input_shape=input_shape
-            ))
+            ) from e
+        
+        # Build model
+        self.model = Sequential()
+        
+        # First LSTM layer
+        self.model.add(LSTM(
+            units=self.lstm_units[0],
+            return_sequences=True,
+            input_shape=input_shape
+        ))
+        self.model.add(Dropout(self.dropout))
+        
+        # Additional LSTM layers
+        for units in self.lstm_units[1:]:
+            self.model.add(LSTM(units=units, return_sequences=True))
             self.model.add(Dropout(self.dropout))
-            
-            # Additional LSTM layers
-            for units in self.lstm_units[1:]:
-                self.model.add(LSTM(units=units, return_sequences=True))
-                self.model.add(Dropout(self.dropout))
-                
-            # Final LSTM layer (not returning sequences)
-            self.model.add(LSTM(units=self.lstm_units[-1], return_sequences=False))
-            self.model.add(Dropout(self.dropout))
-            
-            # Output layer
-            self.model.add(Dense(units=1))
-            
-            # Compile model
-            self.model.compile(
-                optimizer=tf.keras.optimizers.Adam(learning_rate=self.learning_rate),
-                loss='mean_squared_error'
-            )
-            
-            logger.info(f"LSTM model built with layers: {self.lstm_units}")
-            
-            return self
-            
-        except ImportError as e:
-            logger.error("TensorFlow not available. Please install tensorflow.")
-            raise
+        
+        # Final LSTM layer (not returning sequences)
+        self.model.add(LSTM(units=self.lstm_units[-1], return_sequences=False))
+        self.model.add(Dropout(self.dropout))
+        
+        # Output layer
+        self.model.add(Dense(units=1))
+        
+        # Compile model
+        self.model.compile(
+            optimizer=tf.keras.optimizers.Adam(learning_rate=self.learning_rate),
+            loss='mean_squared_error'
+        )
+        
+        logger.info(f"LSTM model built with layers: {self.lstm_units}")
+        
+        return self
     
     def _prepare_data(
         self,

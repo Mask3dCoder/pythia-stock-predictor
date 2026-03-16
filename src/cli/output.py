@@ -12,15 +12,32 @@ from rich.panel import Panel
 from rich import box
 from typing import Optional, List, Dict, Any
 
-# Custom theme for the CLI
+# Custom theme for the CLI - Professional dark theme palette
 _custom_theme = Theme({
-    "success": "bold green",
-    "error": "bold red",
-    "warning": "bold yellow",
-    "info": "cyan",
-    "title": "bold magenta",
-    "subtitle": "italic",
-    "dim": "dim",
+    # Status colors
+    "success": "bold bright_green",
+    "error": "bold bright_red",
+    "warning": "bold bright_yellow",
+    "info": "bright_cyan",
+    
+    # Title and headers
+    "title": "bold bright_magenta",
+    "subtitle": "italic bright_blue",
+    "header": "bold white",
+    
+    # Content styling
+    "dim": "dim white",
+    "highlight": "bold bright_white",
+    "accent": "bright_blue",
+    
+    # Data styling
+    "positive": "green",
+    "negative": "red",
+    "neutral": "yellow",
+    
+    # Symbol indicators
+    "up": "▲",
+    "down": "▼",
 })
 
 # Global console instance
@@ -60,6 +77,27 @@ def print_header(title: str, width: int = 60) -> None:
 def print_subheader(title: str) -> None:
     """Print a subheader."""
     console.print(f"[subtitle]▸ {title}")
+
+
+def print_price_change(price: float, change: float, change_pct: float) -> None:
+    """Print price with change, colored based on positive/negative."""
+    if change > 0:
+        color = "[positive]"
+        arrow = "▲"
+    elif change < 0:
+        color = "[negative]"
+        arrow = "▼"
+    else:
+        color = "[neutral]"
+        arrow = "•"
+    
+    console.print(f"{color}${price:.2f} {arrow} {change:+.2f} ({change_pct:+.2f}%)")
+
+
+def print_version() -> None:
+    """Print version information."""
+    from src import __version__ as version
+    console.print(f"[dim]Pythia Stock Predictor v{version}[/dim]")
 
 
 # ============== Panel Functions ==============

@@ -3,6 +3,12 @@ Stock Data Collector Module
 
 Collects historical and real-time stock data from Yahoo Finance,
 Alpha Vantage, and other data sources.
+
+Enhanced with:
+- Retry logic with exponential backoff
+- Circuit breaker pattern
+- Data validation
+- OHLC data integrity checks
 """
 
 import os
@@ -17,6 +23,9 @@ import numpy as np
 import yfinance as yf
 import requests
 from bs4 import BeautifulSoup
+
+from src.core.utils import retry_with_backoff, circuit_breaker, validate_ohlc
+from src.core.exceptions import DataCollectionError
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +44,11 @@ class StockDataCollector:
         self.data_dir = Path("data")
         self.data_dir.mkdir(exist_ok=True)
         
+        # Retry configuration
+        self.max_retries = self.config.get('max_retries', 3)
+        self.retry_backoff = self.config.get('retry_backoff', 2.0)
+    
+    @retry_with_backoff(max_retries=3, backoff_factor=2.0, exceptions=(requests.RequestException,))
     def download_yahoo_data(
         self,
         symbol: str,
