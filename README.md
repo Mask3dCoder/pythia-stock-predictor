@@ -88,21 +88,35 @@ graph TB
 ## Prerequisites
 
 - **Python**: 3.9 or higher
-- **TensorFlow** (optional): For LSTM/GRU models
 - **pip**: Latest version recommended
 
 ## Installation
 
-### 1. Clone the Repository
+### Quick Install (Recommended)
 
 ```bash
-git clone https://github.com/Mask3dCoder/pythia-stock-predictor.git
-cd pythia-stock-predictor
+# Install directly from PyPI
+pip install pythia-stock-predictor
+
+# Or install with extra features
+pip install pythia-stock-predictor[ml]        # With TensorFlow/PyTorch
+pip install pythia-stock-predictor[visualization]  # With Streamlit/Plotly
+pip install pythia-stock-predictor[ml,visualization]  # With all extras
 ```
 
-### 2. Create Virtual Environment
+Then use:
+```bash
+pythia --help
+pythia predict --symbol AAPL --days 7
+```
+
+### Development Install
 
 ```bash
+# Clone the repository
+git clone https://github.com/Mask3dCoder/pythia-stock-predictor.git
+cd pythia-stock-predictor
+
 # Create virtual environment
 python -m venv venv
 
@@ -111,15 +125,12 @@ venv\Scripts\activate
 
 # Activate on macOS/Linux
 source venv/bin/activate
+
+# Install in editable mode
+pip install -e .
 ```
 
-### 3. Install Dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Configure Environment Variables
+### Configure Environment Variables
 
 Copy the example environment file and configure your API keys:
 
