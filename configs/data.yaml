@@ -1,0 +1,24 @@
+# Yahoo Finance data configuration
+yahoo:
+  default_years: 5
+  interval: "1d"
+  auto_adjust: true
+  back_adjust: false
+  repair: false
+  keepna: false
+
+alpha_vantage:
+  api_key: ${ALPHA_VANTAGE_API_KEY:}
+  timeout: 30
+
+fred:
+  api_key: ${FRED_API_KEY:}
+  series:
+    - GDP
+    - UNRATE
+    - FEDFUNDS
+    - CPIAUCSL
+    - DGS10
+    - VIXC
+    - M2SL
+    - UMCSENT

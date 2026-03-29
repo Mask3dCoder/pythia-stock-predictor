@@ -1,0 +1,33 @@
+# Backtest configuration
+
+# Initial capital
+initial_capital: 100000
+
+# Transaction costs
+commission: 0.001
+commission_fixed: 0.0
+slippage: 0.0005
+slippage_fixed: 0.0
+spread: 0.0002
+min_commission: 1.0
+
+# Position management
+max_position_pct: 0.2
+allow_shorting: true
+stop_loss_pct: 0.05
+take_profit_pct: 0.10
+
+# Risk management
+risk:
+  max_portfolio_risk: 0.06
+  use_kelly: true
+  kelly_fraction: 0.25
+  use_var: true
+  confidence_level: 0.95
+  max_drawdown_limit: 0.20
+
+# Walk-forward backtest
+walk_forward:
+  train_period: 252
+  test_period: 21
+  step_period: 21

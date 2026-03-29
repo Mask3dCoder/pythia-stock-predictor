@@ -1,0 +1,58 @@
+# Model configuration
+default_type: ensemble
+
+# ARIMA model
+arima:
+  order: [5, 1, 0]
+  seasonal_order: [0, 0, 0, 0]
+  auto_fit: true
+  max_p: 5
+  max_d: 2
+  max_q: 5
+
+# LSTM model
+lstm:
+  sequence_length: 60
+  lstm_units: [64, 64]
+  dropout: 0.2
+  bidirectional: false
+  attention: false
+  epochs: 50
+  batch_size: 32
+  learning_rate: 0.001
+
+# GRU model
+gru:
+  sequence_length: 60
+  gru_units: [64, 64]
+  dropout: 0.2
+  bidirectional: false
+  attention: false
+  epochs: 50
+  batch_size: 32
+  learning_rate: 0.001
+
+# CNN-LSTM model
+cnn_lstm:
+  sequence_length: 60
+  n_features: 1
+  conv_filters: [32, 64]
+  kernel_size: 3
+  pool_size: 2
+  lstm_units: [64, 64]
+  dropout: 0.3
+  attention_units: 64
+  num_attention_heads: 4
+  epochs: 100
+  batch_size: 32
+  learning_rate: 0.001
+
+# Ensemble model
+ensemble:
+  weights:
+    arima: 0.2
+    lstm: 0.4
+    gru: 0.3
+    cnn_lstm: 0.1
+  use_stacking: false
+  dynamic_weights: false

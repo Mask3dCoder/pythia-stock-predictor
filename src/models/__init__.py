@@ -1,13 +1,9 @@
 """
-Models Module for Stock Prediction CLI
+Models Module
 
-This module contains time-series forecasting models including ARIMA,
-LSTM, GRU, and ensemble models.
+Prediction models including:
+- Base model classes
+- ARIMA, LSTM, GRU models
+- CNN-LSTM hybrid with attention
+- Model registry
 """
-
-from .arima_model import ARIMAModel
-from .lstm_model import LSTMModel
-from .ensemble_model import EnsembleModel
-from .predictor import StockPredictor
-
-__all__ = ['ARIMAModel', 'LSTMModel', 'EnsembleModel', 'StockPredictor']

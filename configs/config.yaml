@@ -1,0 +1,80 @@
+defaults:
+  - _self_
+  - data: yahoo
+  - model: ensemble
+  - validation: walk_forward
+  - backtest: default
+
+# Environment
+environment: ${ENVIRONMENT:development}
+
+# Data configuration
+data:
+  default_years: 5
+  interval: "1d"
+  symbols:
+    - AAPL
+    - MSFT
+    - GOOGL
+    - AMZN
+  cache_dir: ./data
+  alternative_data:
+    fred_enabled: true
+    market_indices_enabled: true
+
+# Model configuration
+model:
+  default_type: ensemble
+  save_dir: ./models
+  load_existing: false
+
+# Training configuration
+training:
+  epochs: 100
+  batch_size: 32
+  learning_rate: 0.001
+  early_stopping_patience: 15
+  validation_split: 0.2
+
+# Validation configuration
+validation:
+  method: walk_forward
+  train_period: 252
+  test_period: 21
+  n_splits: 5
+
+# Hyperparameter optimization
+hyperopt:
+  enabled: false
+  n_trials: 50
+  timeout: 3600
+
+# Backtest configuration
+backtest:
+  initial_capital: 100000
+  commission: 0.001
+  slippage: 0.0005
+
+# Risk management
+risk:
+  max_position_pct: 0.2
+  max_portfolio_risk: 0.06
+  use_kelly: true
+  kelly_fraction: 0.25
+
+# API configuration
+api:
+  host: 0.0.0.0
+  port: 8000
+  workers: 4
+  reload: false
+  cors_origins:
+    - "*"
+
+# Logging
+logging:
+  level: INFO
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: logs/app.log
+  max_bytes: 10485760
+  backup_count: 5

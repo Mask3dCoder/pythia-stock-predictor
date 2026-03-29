@@ -53,12 +53,28 @@ models:
     batch_size: 32
     learning_rate: 0.001
 
+  # CNN-LSTM settings
+  cnn_lstm:
+    sequence_length: 60
+    n_features: 1
+    conv_filters: [32, 64]
+    kernel_size: 3
+    pool_size: 2
+    lstm_units: [64, 64]
+    dropout: 0.3
+    attention_units: 64
+    num_attention_heads: 4
+    epochs: 50
+    batch_size: 32
+    learning_rate: 0.001
+
   # Ensemble settings
   ensemble:
     weights:
-      arima: 0.3
-      lstm: 0.4
+      arima: 0.2
+      lstm: 0.3
       gru: 0.3
+      cnn_lstm: 0.2
 
 # Technical Indicators
 indicators:

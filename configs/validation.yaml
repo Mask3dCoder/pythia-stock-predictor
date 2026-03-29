@@ -1,0 +1,35 @@
+# Validation configuration
+method: walk_forward
+
+# Walk-forward validation
+walk_forward:
+  train_period: 252  # 1 year
+  test_period: 21    # 1 month
+  step_size: 21
+  min_train_size: 60
+
+# Purged K-Fold
+purged_kfold:
+  n_splits: 5
+  purge_pct: 0.01
+  embargo_pct: 0.0
+  gap_between_splits: 0
+
+# Metrics to compute
+metrics:
+  - mae
+  - rmse
+  - mape
+  - r2
+  - directional_accuracy
+  - sharpe_ratio
+  - sortino_ratio
+  - max_drawdown
+
+# Early stopping
+early_stopping:
+  enabled: true
+  metric: sharpe_ratio
+  patience: 10
+  min_delta: 0.0
+  mode: max
