@@ -1,0 +1,153 @@
+# Pythia Configuration Presets
+
+presets:
+  aggressive:
+    name: "Aggressive (High Risk/High Return)"
+    description: "Aggressive trading strategy with higher risk tolerance"
+    
+    models:
+      default: lstm
+      weights:
+        lstm: 0.6
+        gru: 0.3
+        arima: 0.1
+    
+    indicators:
+      sma: [10, 20]
+      ema: [12, 26]
+      rsi:
+        period: 14
+        overbought: 65
+        oversold: 35
+      macd:
+        fast: 12
+        slow: 26
+        signal: 9
+      bollinger:
+        period: 20
+        std: 2
+    
+    risk:
+      max_position_size: 0.2
+      stop_loss: 0.05
+      take_profit: 0.15
+
+  conservative:
+    name: "Conservative (Low Risk)"
+    description: "Conservative strategy focusing on capital preservation"
+    
+    models:
+      default: arima
+      weights:
+        arima: 0.7
+        lstm: 0.2
+        gru: 0.1
+    
+    indicators:
+      sma: [50, 100, 200]
+      ema: [20, 50]
+      rsi:
+        period: 21
+        overbought: 75
+        oversold: 25
+      macd:
+        fast: 19
+        slow: 39
+        signal: 9
+      bollinger:
+        period: 30
+        std: 2
+    
+    risk:
+      max_position_size: 0.1
+      stop_loss: 0.03
+      take_profit: 0.08
+
+  balanced:
+    name: "Balanced"
+    description: "Balanced approach between risk and return"
+    
+    models:
+      default: ensemble
+      weights:
+        arima: 0.33
+        lstm: 0.33
+        gru: 0.34
+    
+    indicators:
+      sma: [20, 50, 200]
+      ema: [12, 26]
+      rsi:
+        period: 14
+        overbought: 70
+        oversold: 30
+      macd:
+        fast: 12
+        slow: 26
+        signal: 9
+      bollinger:
+        period: 20
+        std: 2
+    
+    risk:
+      max_position_size: 0.15
+      stop_loss: 0.05
+      take_profit: 0.10
+
+  momentum:
+    name: "Momentum Trading"
+    description: "Trend-following momentum strategy"
+    
+    models:
+      default: lstm
+      weights:
+        lstm: 0.8
+        gru: 0.2
+    
+    indicators:
+      sma: [10, 50]
+      ema: [9, 21]
+      rsi:
+        period: 10
+        overbought: 60
+        oversold: 40
+      macd:
+        fast: 8
+        slow: 17
+        signal: 9
+      adx:
+        period: 14
+        threshold: 25
+    
+    risk:
+      max_position_size: 0.25
+      stop_loss: 0.08
+      take_profit: 0.20
+
+  value:
+    name: "Value Investing"
+    description: "Long-term value investing strategy"
+    
+    models:
+      default: arima
+      weights:
+        arima: 0.8
+        lstm: 0.2
+    
+    indicators:
+      sma: [50, 100, 200]
+      ema: [50, 100]
+      rsi:
+        period: 28
+        overbought: 80
+        oversold: 20
+      pe_ratio:
+        max: 25
+      peg_ratio:
+        max: 1.5
+    
+    risk:
+      max_position_size: 0.05
+      stop_loss: 0.15
+      take_profit: 0.30
+      holding_period_days: 90

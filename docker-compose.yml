@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    container_name: pythia-api
+    ports:
+      - "8000:8000"
+    environment:
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - LOG_LEVEL=info
+      - CACHE_ENABLED=true
+    volumes:
+      - ./models:/app/models
+      - ./data:/app/data
+      - ./config.yaml:/app/config.yaml
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - pythia-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: pythia-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    networks:
+      - pythia-network
+
+  streamlit:
+    build: .
+    container_name: pythia-dashboard
+    ports:
+      - "8501:8501"
+    environment:
+      - API_URL=http://api:8000
+    volumes:
+      - ./config.yaml:/app/config.yaml
+    command: streamlit run src/visualization/dashboard.py
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      - pythia-network
+
+volumes:
+  redis-data:
+
+networks:
+  pythia-network:
+    driver: bridge
