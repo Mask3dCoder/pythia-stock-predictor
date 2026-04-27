@@ -16,6 +16,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from src.core.base import BaseModel
+
 logger = logging.getLogger(__name__)
 
 # TensorFlow imports
@@ -35,9 +37,12 @@ try:
     TF_AVAILABLE = True
 except ImportError:
     logger.warning("TensorFlow not available. CNN-LSTM model will not work.")
+    layers = None
 
 
-class AttentionLayer(layers.Layer):
+_LayerBase = layers.Layer if TF_AVAILABLE else object
+
+class AttentionLayer(_LayerBase):
     """
     Custom attention layer for sequence modeling.
     
@@ -89,7 +94,7 @@ class AttentionLayer(layers.Layer):
         return config
 
 
-class ConvLSTMCell(layers.Layer):
+class ConvLSTMCell(_LayerBase):
     """
     Convolutional LSTM cell for local feature extraction.
     """
@@ -137,31 +142,31 @@ class ConvLSTMCell(layers.Layer):
         return config
 
 
-class CNNLSTMModel:
+class CNNLSTMModel(BaseModel):
     """
     CNN-LSTM Hybrid Model with Multi-Head Attention.
-    
+
     Architecture:
     1. Input preprocessing
     2. 1D Convolutional layers for local pattern extraction
     3. Bidirectional LSTM for temporal modeling
     4. Multi-head attention for feature importance
     5. Dense layers for prediction
-    
+
     Supports:
     - Quantization
     - Model export to ONNX
     - Uncertainty estimation via Monte Carlo dropout
     """
-    
+
     def __init__(self, config: Optional[Dict] = None):
         """
         Initialize CNN-LSTM model.
-        
+
         Args:
             config: Model configuration dictionary
         """
-        self.config = config or {}
+        super().__init__(config)
         
         # Model hyperparameters
         self.sequence_length = self.config.get('sequence_length', 60)
@@ -193,11 +198,12 @@ class CNNLSTMModel:
         self.model = None
         self.scaler = None
         self.history = None
+        self._last_series = None
         
-    def _build_model(self) -> Model:
+    def _build_model(self):
         """
         Build the CNN-LSTM architecture.
-        
+
         Returns:
             Compiled Keras model
         """
@@ -320,33 +326,56 @@ class CNNLSTMModel:
     
     def fit(
         self,
-        X: np.ndarray,
-        y: np.ndarray,
+        X: np.ndarray = None,
+        y: np.ndarray = None,
+        data: pd.Series = None,
         validation_split: float = 0.2,
         verbose: int = 1
     ) -> 'CNNLSTMModel':
         """
         Train the model.
-        
+
+        Supports two calling conventions:
+        1) fit(data=pd.Series) — BaseModel-compatible
+        2) fit(X=np.ndarray, y=np.ndarray) — array-based training
+
         Args:
             X: Training features (samples, timesteps, features)
             y: Training targets
+            data: Time series data (BaseModel interface)
             validation_split: Validation split ratio
             verbose: Verbosity level
-            
+
         Returns:
             Self
         """
         if not TF_AVAILABLE:
             raise ImportError("TensorFlow is required")
-            
+
+        # BaseModel-compatible: convert pd.Series to sequences
+        if data is not None:
+            self._last_series = data
+            self.n_features = 1
+            values = data.values.reshape(-1, 1)
+            from sklearn.preprocessing import StandardScaler
+            self.scaler = StandardScaler()
+            scaled = self.scaler.fit_transform(values)
+            X_seq, y_seq = [], []
+            for i in range(self.sequence_length, len(scaled)):
+                X_seq.append(scaled[i - self.sequence_length:i, 0])
+                y_seq.append(scaled[i, 0])
+            X = np.array(X_seq).reshape(-1, self.sequence_length, 1)
+            y = np.array(y_seq)
+        elif X is None or y is None:
+            raise ValueError("Either pass data=pd.Series or X=array, y=array")
+
         # Update n_features
         self.n_features = X.shape[2] if X.ndim > 2 else 1
-        
+
         # Build model if not already built
         if self.model is None:
             self.model = self._build_model()
-            
+
         # Prepare callbacks
         callbacks_list = [
             callbacks.EarlyStopping(
@@ -362,7 +391,7 @@ class CNNLSTMModel:
                 verbose=verbose
             )
         ]
-        
+
         # Train
         self.history = self.model.fit(
             X, y,
@@ -372,27 +401,100 @@ class CNNLSTMModel:
             callbacks=callbacks_list,
             verbose=verbose
         )
-        
+
         self.is_fitted = True
-        
+
         return self
     
-    def predict(self, X: np.ndarray) -> np.ndarray:
+    def predict_from_array(self, X: np.ndarray) -> np.ndarray:
         """
-        Generate predictions.
-        
+        Generate predictions from pre-sequenced array data.
+
         Args:
             X: Input features
-            
+
         Returns:
             Predictions array
         """
         if self.model is None:
             raise ValueError("Model not trained")
-            
+
         predictions = self.model.predict(X, verbose=0)
-        
+
         return predictions.flatten()
+
+    def predict(self, steps: int = 1) -> np.ndarray:
+        """
+        BaseModel-compatible: predict N steps ahead from stored series data.
+
+        Args:
+            steps: Number of steps to predict
+
+        Returns:
+            Array of predictions
+        """
+        if self.model is None:
+            raise ValueError("Model not trained. Call fit() first.")
+        if self._last_series is None:
+            raise ValueError("No stored series data. Call fit() first.")
+        return self.predict_sequence_from_series(self._last_series, steps)
+
+    def predict_sequence_from_series(self, series: pd.Series, n_steps: int) -> np.ndarray:
+        """Predict future steps from a pandas Series (scales and sequences internally)."""
+        if self.scaler is None:
+            raise ValueError("Scaler not set. Train the model first.")
+        scaled = self.scaler.transform(series.values.reshape(-1, 1))
+        last = scaled[-self.sequence_length:].reshape(1, self.sequence_length, 1)
+        return self.predict_sequence(last, n_steps)
+
+    def predict_with_confidence(self, steps: int = 1, alpha: float = 0.05) -> Dict:
+        """BaseModel-compatible: predictions with confidence bounds."""
+        mean = self.predict(steps)
+        std = np.abs(mean) * 0.05
+        z = 1.96
+        return {
+            'predictions': mean,
+            'lower_bound': np.maximum(mean - z * std, 0),
+            'upper_bound': mean + z * std,
+            'confidence': 1 - alpha,
+        }
+
+    def evaluate(self, test_data: pd.Series) -> Dict:
+        """BaseModel-compatible: evaluate on test data."""
+        if self.model is None:
+            raise ValueError("Model not trained. Call fit() first.")
+        from sklearn.preprocessing import StandardScaler
+        import numpy as np
+
+        n = len(test_data)
+        if n < self.sequence_length + 1:
+            raise ValueError(f"Need at least {self.sequence_length + 1} points, got {n}")
+
+        X_test, y_test = [], []
+        for i in range(self.sequence_length, n):
+            X_test.append(test_data.values[i - self.sequence_length:i])
+            y_test.append(test_data.values[i])
+        X_test = np.array(X_test).reshape(-1, self.sequence_length, 1)
+        y_test = np.array(y_test)
+
+        preds = self.predict_from_array(X_test)
+
+        from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+        mae = mean_absolute_error(y_test, preds)
+        rmse = np.sqrt(mean_squared_error(y_test, preds))
+        r2 = r2_score(y_test, preds) if np.std(y_test) > 0 else 0
+        mape = np.mean(np.abs((y_test - preds) / np.maximum(y_test, 1e-10))) * 100
+
+        return {'mae': mae, 'rmse': rmse, 'r2': r2, 'mape': mape,
+                'predictions': preds, 'actual': y_test}
+
+    def save_model(self, path: Path) -> None:
+        """BaseModel-compatible: save model to path."""
+        self.save(path)
+
+    def load_model(self, path: Path) -> 'CNNLSTMModel':
+        """BaseModel-compatible: load model from path."""
+        return self.load(path)
     
     def predict_with_uncertainty(
         self,
@@ -568,7 +670,7 @@ class QuantizedModel:
         
     def convert_to_onnx(
         self,
-        keras_model: Model,
+        keras_model,
         output_path: Path
     ) -> None:
         """

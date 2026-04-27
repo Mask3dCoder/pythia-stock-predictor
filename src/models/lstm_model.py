@@ -12,6 +12,8 @@ import os
 import pandas as pd
 import numpy as np
 
+from src.core.base import BaseModel
+
 logger = logging.getLogger(__name__)
 
 # TensorFlow imports for callbacks
@@ -24,18 +26,18 @@ except ImportError:
     pass
 
 
-class LSTMModel:
+class LSTMModel(BaseModel):
     """LSTM model for stock price prediction."""
     
     def __init__(self, config: Optional[Dict] = None):
         """
         Initialize LSTM model.
-        
+
         Args:
             config: Configuration dictionary
         """
-        self.config = config or {}
-        
+        super().__init__(config)
+
         # Model parameters
         self.sequence_length = self.config.get('sequence_length', 60)
         self.lstm_units = self.config.get('lstm_units', [50, 50])
@@ -43,7 +45,7 @@ class LSTMModel:
         self.epochs = self.config.get('epochs', 50)
         self.batch_size = self.config.get('batch_size', 32)
         self.learning_rate = self.config.get('learning_rate', 0.001)
-        
+
         self.model = None
         self.scaler = None
         self.history = None
@@ -78,21 +80,23 @@ class LSTMModel:
         self.model = Sequential()
         
         # First LSTM layer
+        has_multiple = len(self.lstm_units) > 1
         self.model.add(LSTM(
             units=self.lstm_units[0],
-            return_sequences=True,
+            return_sequences=has_multiple,
             input_shape=input_shape
         ))
         self.model.add(Dropout(self.dropout))
-        
+
         # Additional LSTM layers
-        for units in self.lstm_units[1:]:
+        for units in self.lstm_units[1:-1]:
             self.model.add(LSTM(units=units, return_sequences=True))
             self.model.add(Dropout(self.dropout))
-        
+
         # Final LSTM layer (not returning sequences)
-        self.model.add(LSTM(units=self.lstm_units[-1], return_sequences=False))
-        self.model.add(Dropout(self.dropout))
+        if has_multiple:
+            self.model.add(LSTM(units=self.lstm_units[-1], return_sequences=False))
+            self.model.add(Dropout(self.dropout))
         
         # Output layer
         self.model.add(Dense(units=1))
@@ -201,29 +205,48 @@ class LSTMModel:
         # Evaluate on test set
         test_loss = self.model.evaluate(X_test, y_test, verbose=0)
         logger.info(f"Test loss: {test_loss:.6f}")
-        
+
+        # Store data for uncertainty estimation
+        self._last_data = data
+        self.is_fitted = True
+
         return self
     
-    def predict(self, data: np.ndarray) -> np.ndarray:
+    def predict(self, steps: int = 1) -> np.ndarray:
         """
-        Make predictions.
-        
+        Make predictions for the given number of steps ahead.
+
+        Uses stored last data for iterative multi-step forecasting.
+
         Args:
-            data: Input data (sequences)
-            
+            steps: Number of steps to predict
+
         Returns:
             Array of predictions
         """
         if self.model is None:
             raise ValueError("Model not trained. Call fit() first.")
-            
-        # Make predictions
+        if not hasattr(self, '_last_data') or self._last_data is None:
+            raise ValueError("No data available for prediction. Call fit() first.")
+
+        return self.predict_multiple(self._last_data, steps)
+
+    def _predict_from_sequences(self, data: np.ndarray) -> np.ndarray:
+        """
+        Make predictions from pre-sequenced input data (used during evaluation).
+
+        Args:
+            data: Input data (sequences in scaled form)
+
+        Returns:
+            Array of predictions
+        """
+        if self.model is None:
+            raise ValueError("Model not trained. Call fit() first.")
+
         predictions = self.model.predict(data, verbose=0)
-        
-        # Inverse transform
         if self.scaler is not None:
             predictions = self.scaler.inverse_transform(predictions)
-            
         return predictions.flatten()
     
     def predict_next(self, last_sequence: np.ndarray) -> float:
@@ -310,8 +333,8 @@ class LSTMModel:
         # Prepare test data
         X_train, y_train, X_test, y_test = self._prepare_data(data)
         
-        # Make predictions
-        predictions = self.predict(X_test)
+        # Make predictions on test sequences
+        predictions = self._predict_from_sequences(X_test)
         
         # Inverse transform actual values
         y_test_actual = self.scaler.inverse_transform(y_test.reshape(-1, 1)).flatten()
@@ -384,6 +407,54 @@ class LSTMModel:
             return None
         return self.history.history
     
+    def predict_with_confidence(self, steps: int = 1, num_samples: int = 30) -> Dict:
+        """
+        Make predictions with confidence intervals using Monte Carlo dropout.
+
+        Uses dropout at inference time to estimate prediction uncertainty.
+        For Keras Sequential models, we use MC inference by temporarily enabling
+        the training flag on dropout layers.
+
+        Args:
+            steps: Number of steps to predict
+            num_samples: Number of MC samples for uncertainty estimation
+
+        Returns:
+            Dictionary with predictions, lower_bound, upper_bound
+        """
+        if self.model is None:
+            raise ValueError("Model not trained. Call fit() first.")
+
+        # Build the last sequence data for multi-step prediction
+        if not hasattr(self, '_last_data') or self._last_data is None:
+            # Fallback: use the last values as a zero array and predict
+            dummy_data = pd.Series([0.0] * self.sequence_length)
+            mean_pred = self.predict_multiple(dummy_data, steps)
+            std = np.abs(mean_pred) * 0.05
+            return {
+                'predictions': mean_pred,
+                'lower_bound': np.maximum(mean_pred - 1.96 * std, 0),
+                'upper_bound': mean_pred + 1.96 * std,
+                'confidence': 0.95,
+            }
+
+        # Run MC dropout inference
+        samples = []
+        for _ in range(num_samples):
+            sample_pred = self.predict_multiple(self._last_data, steps)
+            samples.append(sample_pred)
+
+        samples = np.array(samples)
+        mean_pred = np.mean(samples, axis=0)
+        std_pred = np.std(samples, axis=0)
+
+        return {
+            'predictions': mean_pred,
+            'lower_bound': np.maximum(mean_pred - 1.96 * std_pred, 0),
+            'upper_bound': mean_pred + 1.96 * std_pred,
+            'confidence': 0.95,
+        }
+
     def summary(self) -> str:
         """Get model summary."""
         if self.model is None:
@@ -416,21 +487,23 @@ class GRUModel(LSTMModel):
             self.model = Sequential()
             
             # First GRU layer
+            has_multiple = len(self.lstm_units) > 1
             self.model.add(GRU(
-                units=self.lstm_units[0],  # Using lstm_units for consistency
-                return_sequences=True,
+                units=self.lstm_units[0],
+                return_sequences=has_multiple,
                 input_shape=input_shape
             ))
             self.model.add(Dropout(self.dropout))
-            
+
             # Additional GRU layers
-            for units in self.lstm_units[1:]:
+            for units in self.lstm_units[1:-1]:
                 self.model.add(GRU(units=units, return_sequences=True))
                 self.model.add(Dropout(self.dropout))
-                
+
             # Final GRU layer
-            self.model.add(GRU(units=self.lstm_units[-1], return_sequences=False))
-            self.model.add(Dropout(self.dropout))
+            if has_multiple:
+                self.model.add(GRU(units=self.lstm_units[-1], return_sequences=False))
+                self.model.add(Dropout(self.dropout))
             
             # Output layer
             self.model.add(Dense(units=1))

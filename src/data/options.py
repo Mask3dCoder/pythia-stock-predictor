@@ -93,13 +93,15 @@ class OptionsDataCollector:
 
             if expiration is None:
                 target_date = datetime.now() + timedelta(days=30)
+                best_exp = None
+                best_diff = float('inf')
                 for exp in expirations:
                     exp_date = datetime.strptime(exp, '%Y-%m-%d')
-                    if exp_date <= target_date:
-                        expiration = exp
-                        break
-                if expiration is None:
-                    expiration = expirations[0]
+                    diff = abs((exp_date - target_date).total_seconds())
+                    if diff < best_diff:
+                        best_diff = diff
+                        best_exp = exp
+                expiration = best_exp if best_exp is not None else expirations[0]
 
             opt = ticker.option_chain(expiration)
             calls = opt.calls

@@ -68,7 +68,7 @@ Prediction
 Models
 ~~~~~~
 
-.. http:get:: /models/info
+.. http:get:: /models
 
    Get available models.
 

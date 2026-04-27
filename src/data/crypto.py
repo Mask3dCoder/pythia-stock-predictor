@@ -147,10 +147,10 @@ class CryptoDataCollector:
                     "price_change_percentage_24h"
                 ),
                 "price_change_percentage_7d": data.get("market_data", {}).get(
-                    "price_change_percentage_7d_in_currency"
+                    "price_change_percentage_7d"
                 ),
                 "price_change_percentage_30d": data.get("market_data", {}).get(
-                    "price_change_percentage_30d_in_currency"
+                    "price_change_percentage_30d"
                 ),
                 "circulating_supply": data.get("market_data", {}).get(
                     "circulating_supply"

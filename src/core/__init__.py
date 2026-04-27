@@ -35,14 +35,12 @@ from .base import (
     BaseDataCollector,
     BasePreprocessor,
     BaseSentimentAnalyzer,
-    ModelRegistry,
-    model_registry,
 )
 
 __all__ = [
     # Exceptions
     'PredictionError',
-    'DataCollectionError', 
+    'DataCollectionError',
     'ModelTrainingError',
     'ValidationError',
     'ConfigurationError',
@@ -68,6 +66,4 @@ __all__ = [
     'BaseDataCollector',
     'BasePreprocessor',
     'BaseSentimentAnalyzer',
-    'ModelRegistry',
-    'model_registry',
 ]

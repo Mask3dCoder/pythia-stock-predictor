@@ -11,31 +11,33 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 
+from src.core.base import BaseModel
+
 logger = logging.getLogger(__name__)
 
 
-class ARIMAModel:
+class ARIMAModel(BaseModel):
     """ARIMA model for stock price prediction."""
     
     def __init__(self, config: Optional[Dict] = None):
         """
         Initialize ARIMA model.
-        
+
         Args:
             config: Configuration dictionary
         """
-        self.config = config or {}
-        
+        super().__init__(config)
+
         # ARIMA order parameters
         self.order = self.config.get('order', [5, 1, 0])
         self.seasonal_order = self.config.get('seasonal_order', [0, 0, 0, 0])
-        
+
         # Auto-fit configuration
-        self.auto_fit = self.config.get('auto_fit', False)
+        self._auto_fit_enabled = self.config.get('auto_fit', False)
         self.max_p = self.config.get('max_p', 5)
         self.max_d = self.config.get('max_d', 2)
         self.max_q = self.config.get('max_q', 5)
-        
+
         self.model = None
         self.results = None
         self.scaler = None
@@ -122,11 +124,9 @@ class ARIMAModel:
             self._is_stationary = is_stationary
             
             # Use auto-fit if enabled or if no order provided
-            if self.auto_fit or order is None:
+            if self._auto_fit_enabled or order is None:
                 order, aic = self.auto_select_parameters(data)
                 logger.info(f"Auto-selected ARIMA order: {order}")
-            elif order is None:
-                order = tuple(self.order)
             
             logger.info(f"Fitting ARIMA model with order={order}")
             
@@ -142,8 +142,9 @@ class ARIMAModel:
             # Store the order used
             self.order = list(order)
             
+            self.is_fitted = True
             logger.info(f"ARIMA model fitted successfully")
-            
+
             return self
             
         except Exception as e:
@@ -282,9 +283,10 @@ class ARIMAModel:
             self.order = list(best_order)
             self.model = ARIMA(scaled_data, order=best_order)
             self.results = self.model.fit()
-            
+            self.is_fitted = True
+
             return self
-            
+
         except Exception as e:
             logger.error(f"Error in auto-ARIMA: {str(e)}")
             # Fall back to simple fit

@@ -265,7 +265,8 @@ class ForexDataCollector:
             rate = quote.get("current")
         elif to_currency == "USD":
             quote = self.get_quote(f"USD{from_currency}")
-            rate = 1 / quote.get("current", 0) if quote.get("current") else None
+            current = quote.get("current")
+            rate = 1 / current if current is not None and current != 0 else None
         else:
             cross_rate = self.calculate_cross_rate(from_currency, to_currency)
             rate = cross_rate

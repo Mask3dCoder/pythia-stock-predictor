@@ -291,10 +291,15 @@ class DataPreprocessor:
         df["bb_middle"] = sma
         df["bb_lower"] = sma - (std_dev * std)
 
-        # Calculate bandwidth and %B
-        df["bb_bandwidth"] = (df["bb_upper"] - df["bb_lower"]) / df["bb_middle"]
-        df["bb_percent"] = (df["close"] - df["bb_lower"]) / (
-            df["bb_upper"] - df["bb_lower"]
+        # Calculate bandwidth and %B (safe division)
+        bb_range = df["bb_upper"] - df["bb_lower"]
+        df["bb_bandwidth"] = np.where(
+            df["bb_middle"] != 0, bb_range / df["bb_middle"], 0.0
+        )
+        df["bb_percent"] = np.where(
+            bb_range != 0,
+            (df["close"] - df["bb_lower"]) / bb_range,
+            0.5,
         )
 
         logger.info(f"Added Bollinger Bands (period={period}, std_dev={std_dev})")
@@ -458,8 +463,11 @@ class DataPreprocessor:
         )
 
         # Calculate +DI and -DI
-        plus_di = 100 * (plus_dm.ewm(span=period).mean() / atr)
-        minus_di = 100 * (minus_dm.ewm(span=period).mean() / atr)
+        atr_ema = atr.replace(0, np.nan).ewm(span=period).mean()
+        plus_di = 100 * (plus_dm.ewm(span=period).mean() / atr_ema.replace(0, np.nan))
+        minus_di = 100 * (minus_dm.ewm(span=period).mean() / atr_ema.replace(0, np.nan))
+        plus_di = plus_di.fillna(0)
+        minus_di = minus_di.fillna(0)
 
         # Calculate DX
         dx = 100 * np.abs(plus_di - minus_di) / (plus_di + minus_di)

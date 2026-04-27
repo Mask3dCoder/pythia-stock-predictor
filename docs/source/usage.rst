@@ -113,15 +113,12 @@ Use Pythia in your Python code:
 
     from src.models.predictor import StockPredictor
 
-    predictor = StockPredictor(
-        model='ensemble',
-        indicators=['rsi', 'macd', 'bollinger']
-    )
+    predictor = StockPredictor('AAPL', 'ensemble')
 
-    predictor.load_data('AAPL')
+    predictor.load_data(years=5)
     predictor.train()
-    prediction = predictor.predict(days=30)
-    predictor.save_model('models/aapl_model.pkl')
+    predictions = predictor.predict(steps=30)
+    print(predictions['predictions'])
 
 Fundamental Analysis:
 

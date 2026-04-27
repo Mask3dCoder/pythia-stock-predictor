@@ -332,8 +332,8 @@ class StockPredictor:
             raise ValueError("Model not trained. Call load_data() and train() first.")
 
         if hasattr(self.model, "predict_next"):
-            last_price = self.data["close"].values[-1]
-            return self.model.predict_next(last_price)
+            last_sequence = self.data["close"].iloc[-self.model.sequence_length:].values
+            return self.model.predict_next(last_sequence)
         else:
             predictions = self.model.predict(1)
             return float(predictions[0])

@@ -393,7 +393,7 @@ class AlternativeDataIntegrator:
             DataFrame with market features
         """
         if symbols is None:
-            symbols = list(self.INDEX_SYMBOLS.values())
+            symbols = list(MarketIndexFetcher.INDEX_SYMBOLS.values())
             
         features = {}
         

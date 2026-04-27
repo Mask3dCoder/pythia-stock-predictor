@@ -13,7 +13,7 @@ from datetime import timedelta
 from enum import Enum
 
 import yaml
-from pydantic import BaseModel, Field, validator, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic_settings import BaseSettings
 
 logger = logging.getLogger(__name__)
@@ -102,7 +102,8 @@ class ARIMAConfig(BaseModel):
     max_d: int = Field(default=2, ge=0, le=3)
     max_q: int = Field(default=5, ge=0, le=10)
     
-    @validator('order')
+    @field_validator('order')
+    @classmethod
     def validate_order(cls, v):
         if len(v) != 3:
             raise ValueError("ARIMA order must have 3 values (p, d, q)")
@@ -122,7 +123,8 @@ class LSTMConfig(BaseModel):
     early_stopping_patience: int = Field(default=10, ge=1, le=50)
     use_multifeature: bool = True
     
-    @validator('lstm_units')
+    @field_validator('lstm_units')
+    @classmethod
     def validate_units(cls, v):
         if not v or len(v) == 0:
             raise ValueError("lstm_units cannot be empty")
@@ -142,7 +144,8 @@ class GRUConfig(BaseModel):
     early_stopping_patience: int = Field(default=10, ge=1, le=50)
     use_multifeature: bool = True
     
-    @validator('gru_units')
+    @field_validator('gru_units')
+    @classmethod
     def validate_units(cls, v):
         if not v or len(v) == 0:
             raise ValueError("gru_units cannot be empty")
@@ -159,12 +162,12 @@ class EnsembleConfig(BaseModel):
     dynamic_weights: bool = False
     recalculate_interval: int = Field(default=5, ge=1)
     
-    @validator('weights')
+    @field_validator('weights')
+    @classmethod
     def validate_weights(cls, v):
         total = sum(v.values())
         if not 0.99 <= total <= 1.01:
             # Normalize weights
-            total = sum(v.values())
             v = {k: val/total for k, val in v.items()}
         return v
 
@@ -286,13 +289,10 @@ class AppConfig(BaseModel):
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     
     # Metadata
-    version: str = "2.0.0"
+    version: str = "3.0.0"
     environment: str = "development"
     
-    class Config:
-        """Pydantic config."""
-        validate_assignment = True
-        extra = "forbid"
+    model_config = ConfigDict(validate_assignment=True, extra="forbid")
 
 
 # Configuration Loading Functions

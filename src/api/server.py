@@ -90,25 +90,21 @@ def get_client_id(request: Request) -> str:
 
 
 async def verify_api_key(x_api_key: Optional[str] = Header(None)):
-    """Verify API key from header."""
+    """Verify API key from header. Only enforced if API_KEY env var is set."""
     expected_key = os.environ.get('API_KEY')
-    
-    # Fail if no API key is configured
+
+    # If no API key is configured, skip auth (development / unconfigured mode)
     if not expected_key:
-        logger.error("API_KEY environment variable not set. Configure for production!")
-        raise HTTPException(
-            status_code=500,
-            detail="Server configuration error: API key not configured"
-        )
-    
+        return None
+
     if x_api_key != expected_key:
         raise HTTPException(status_code=401, detail="Invalid API key")
     return x_api_key
 
 
-async def check_rate_limit(request: Request):
-    """Check rate limit for client."""
-    client_id = get_client_id(request)
+async def check_rate_limit(request: Request, api_key: str = None):
+    """Check rate limit for client using API key as identifier."""
+    client_id = api_key if api_key else get_client_id(request)
     if not rate_limiter.is_allowed(client_id):
         raise HTTPException(
             status_code=429,
@@ -136,7 +132,7 @@ class PredictionAPI:
         self.app = FastAPI(
             title="Stock Prediction API",
             description="Real-time stock market prediction API",
-            version="1.0.0"
+            version="3.0.0"
         )
         
         # Add CORS middleware
@@ -159,7 +155,7 @@ class PredictionAPI:
             """Root endpoint."""
             return {
                 "name": "Stock Prediction API",
-                "version": "1.0.0",
+                "version": "3.0.0",
                 "status": "running"
             }
             
@@ -171,6 +167,13 @@ class PredictionAPI:
         @self.app.websocket("/ws/predict")
         async def websocket_predict(websocket: WebSocket):
             """WebSocket endpoint for real-time predictions."""
+            expected_key = os.environ.get('API_KEY')
+            if expected_key:
+                client_key = websocket.headers.get('x-api-key') or websocket.query_params.get('api_key')
+                if client_key != expected_key:
+                    await websocket.close(code=4001, reason="Invalid API key")
+                    return
+
             await websocket.accept()
             try:
                 while True:
@@ -215,7 +218,7 @@ class PredictionAPI:
         ):
             """Make stock predictions with rate limiting."""
             # Check rate limit
-            await check_rate_limit(req)
+            await check_rate_limit(req, api_key)
             
             try:
                 # Get or create predictor
@@ -241,12 +244,15 @@ class PredictionAPI:
                 raise HTTPException(status_code=500, detail=str(e))
                 
         @self.app.get("/predict/{symbol}")
-        def predict_symbol(
+        async def predict_symbol(
             symbol: str,
+            req: Request,
             model_type: str = "ensemble",
-            days: int = 7
+            days: int = 7,
+            api_key: str = Depends(verify_api_key)
         ):
             """Make predictions for a symbol (GET request)."""
+            await check_rate_limit(req, api_key)
             try:
                 predictor = self._get_predictor(symbol, model_type)
                 predictions = predictor.predict(days)
@@ -266,8 +272,13 @@ class PredictionAPI:
                 raise HTTPException(status_code=500, detail=str(e))
                 
         @self.app.get("/stock/{symbol}")
-        def get_stock_info(symbol: str):
+        async def get_stock_info(
+            symbol: str,
+            req: Request,
+            api_key: str = Depends(verify_api_key)
+        ):
             """Get stock information."""
+            await check_rate_limit(req, api_key)
             try:
                 predictor = self._get_predictor(symbol, "ensemble")
                 
@@ -290,7 +301,7 @@ class PredictionAPI:
                 raise HTTPException(status_code=500, detail=str(e))
                 
         @self.app.get("/models")
-        def list_models():
+        def list_models(api_key: str = Depends(verify_api_key)):
             """List available models."""
             return {
                 "models": ["arima", "lstm", "gru", "ensemble"]
@@ -349,3 +360,6 @@ def run_server(host: str = "0.0.0.0", port: int = 8000):
     """
     api = PredictionAPI()
     api.run(host, port)
+
+
+app = create_app()

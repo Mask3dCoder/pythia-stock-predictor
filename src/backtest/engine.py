@@ -301,8 +301,8 @@ class BacktestEngine:
         
         # Update capital
         if direction > 0:
-            # Long: pay for shares
-            self.capital -= cost
+            # Long: pay for shares plus transaction cost
+            self.capital -= (price * max_shares + cost)
         else:
             # Short: receive money
             self.capital += price * max_shares - cost
@@ -341,13 +341,10 @@ class BacktestEngine:
             direction
         )
         
-        # Update capital
-        if self.position > 0:
-            # Close long: receive money
-            self.capital += self.position * price - cost
-        else:
-            # Close short: pay money
-            self.capital += self.position * (self.entry_price - price) - cost
+        # Update capital (same formula for long and short)
+        # For longs: position > 0 → receive money from selling
+        # For shorts: position < 0 → pay money to buy back
+        self.capital += self.position * price - cost
             
         self.trades.append({
             'date': date,
@@ -503,7 +500,7 @@ class WalkForwardBacktest:
         start = self.train_period
         
         while start + self.test_period <= len(prices):
-            train_data = prices.iloc[start - self.train_period:start]
+            train_data = prices.iloc[max(0, start - self.train_period):start]
             test_data = prices.iloc[start:start + self.test_period]
             
             try:

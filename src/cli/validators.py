@@ -11,7 +11,7 @@ from typing import Tuple, Optional, List
 # ============== Validation Constants ==============
 
 VALID_SYMBOL_PATTERN = re.compile(r'^[A-Z]{1,5}$')
-VALID_MODEL_TYPES = {'arima', 'lstm', 'gru', 'ensemble'}
+VALID_MODEL_TYPES = {'arima', 'lstm', 'gru', 'ensemble', 'cnn_lstm'}
 VALID_SENTIMENT_METHODS = {'vader', 'textblob', 'combined'}
 
 MIN_YEARS = 1

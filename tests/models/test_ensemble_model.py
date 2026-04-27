@@ -145,8 +145,8 @@ class TestEnsembleModelFix:
         # Fit should handle this gracefully
         ensemble.fit(data)
         
-        # last_sequence should be None when data is insufficient
-        assert ensemble.last_sequence is None or len(ensemble.last_sequence) < 10
+        # last_sequence is now padded to sequence_length for prediction stability
+        assert len(ensemble.last_sequence) == 10
 
 
 if __name__ == '__main__':

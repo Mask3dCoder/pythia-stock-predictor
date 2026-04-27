@@ -10,8 +10,9 @@ import os
 # When installed, the project root is the parent of src/
 # When running from source, it's the current directory
 possible_roots = [
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),  # Installed
-    os.path.dirname(os.path.abspath(__file__)),  # Running from src/cli/
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),  # Installed: src/cli/ -> src/ -> project root
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),                     # Source: src/cli/ -> src/
+    os.path.abspath(os.path.curdir),                                                  # Fallback: CWD
 ]
 
 for root in possible_roots:
@@ -25,8 +26,8 @@ for root in possible_roots:
 try:
     from main import main
 except ImportError:
-    # Fallback: try current directory
-    from src.main import main
+    import main as _main
+    main = _main.main
 
 if __name__ == '__main__':
     sys.exit(main())

@@ -1,5 +1,5 @@
 project = 'Pythia Stock Predictor'
-copyright = '2024, Pythia Team'
+copyright = '2026, Pythia Team'
 author = 'Pythia Team'
 release = '3.0.0'
 

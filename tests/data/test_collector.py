@@ -96,7 +96,7 @@ class TestParallelDownloads:
         result = collector.download_multiple_symbols(symbols, years=1)
         
         # At least one symbol should succeed
-        assert len(result) >= 0
+        assert len(result) > 0
 
 
 class TestStockDataCollector:

@@ -22,7 +22,6 @@ import pandas as pd
 import numpy as np
 import yfinance as yf
 import requests
-from bs4 import BeautifulSoup
 
 from src.core.utils import retry_with_backoff, circuit_breaker, validate_ohlc
 from src.core.exceptions import DataCollectionError
@@ -328,14 +327,15 @@ class StockDataCollector:
         Returns:
             Path to saved file
         """
-        filename = f"{symbol}_{data_type}_{datetime.now().strftime('%Y%m%d')}.csv"
+        safe_symbol = "".join(c for c in symbol if c.isalnum() or c in "._-")[:20]
+        filename = f"{safe_symbol}_{data_type}_{datetime.now().strftime('%Y%m%d')}.csv"
         filepath = self.data_dir / filename
-        
+
         df.to_csv(filepath)
         logger.info(f"Saved data to {filepath}")
-        
+
         return filepath
-    
+
     def load_data(
         self,
         symbol: str,
@@ -343,15 +343,16 @@ class StockDataCollector:
     ) -> Optional[pd.DataFrame]:
         """
         Load saved data from CSV file.
-        
+
         Args:
             symbol: Stock symbol
             data_type: Type of data
-            
+
         Returns:
             DataFrame if found, None otherwise
         """
-        pattern = f"{symbol}_{data_type}_*.csv"
+        safe_symbol = "".join(c for c in symbol if c.isalnum() or c in "._-")[:20]
+        pattern = f"{safe_symbol}_{data_type}_*.csv"
         
         files = list(self.data_dir.glob(pattern))
         
@@ -416,8 +417,8 @@ class StockDataCollector:
         """
         try:
             ticker = yf.Ticker(symbol)
-            news = ticker.news
-            
+            news = getattr(ticker, 'news', None)
+
             if not news:
                 logger.info(f"No news available for {symbol}")
                 return []

@@ -220,7 +220,7 @@ class HyperparameterOptimizer:
             
             try:
                 model = LSTMModel(params)
-                model.fit(X_train, y_train, verbose=0)
+                model.fit(pd.Series(y_train.flatten()), verbose=0)
                 
                 predictions = model.model.predict(X_val, verbose=0).flatten()
                 val_loss = np.mean((y_val - predictions) ** 2)
@@ -349,7 +349,7 @@ class HyperparameterOptimizer:
                     'sequence_length': X_subset.shape[1],
                     'epochs': 20
                 })
-                model.fit(X_subset, y_train, verbose=0)
+                model.fit(pd.Series(y_train.flatten()), verbose=0)
                 
                 return model.history.history['val_loss'][-1]
                 
@@ -426,11 +426,11 @@ class AutoMLPipeline:
             try:
                 if model_type == 'lstm':
                     model = LSTMModel(self.config.get('lstm', {}))
-                    model.fit(X_train, y_train, verbose=0)
-                    
+                    model.fit(pd.Series(y_train.flatten()), verbose=0)
+
                 elif model_type == 'gru':
                     model = LSTMModel(self.config.get('gru', {}))
-                    model.fit(X_train, y_train, verbose=0)
+                    model.fit(pd.Series(y_train.flatten()), verbose=0)
                     
                 elif model_type == 'arima':
                     model = ARIMAModel(self.config.get('arima', {}))

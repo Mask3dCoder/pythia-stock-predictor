@@ -11,7 +11,7 @@ import numpy as np
 from unittest.mock import Mock, patch
 
 
-class TestARPIMAMAPESafeDivision:
+class TestARIMAMAPESafeDivision:
     """Test suite for ARIMA MAPE safe division fix."""
     
     def test_mape_with_zero_values(self):

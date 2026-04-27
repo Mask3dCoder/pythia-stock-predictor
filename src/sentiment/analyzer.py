@@ -277,10 +277,13 @@ class SentimentAnalyzer:
             summary['positive_count'] = len(df[df['sentiment'] == 'positive'])
             summary['negative_count'] = len(df[df['sentiment'] == 'negative'])
             summary['neutral_count'] = len(df[df['sentiment'] == 'neutral'])
-            
-            summary['positive_pct'] = summary['positive_count'] / summary['total_items'] * 100
-            summary['negative_pct'] = summary['negative_count'] / summary['total_items'] * 100
-            summary['neutral_pct'] = summary['neutral_count'] / summary['total_items'] * 100
+
+            if summary['total_items'] > 0:
+                summary['positive_pct'] = summary['positive_count'] / summary['total_items'] * 100
+                summary['negative_pct'] = summary['negative_count'] / summary['total_items'] * 100
+                summary['neutral_pct'] = summary['neutral_count'] / summary['total_items'] * 100
+            else:
+                summary['positive_pct'] = summary['negative_pct'] = summary['neutral_pct'] = 0
             
         if 'compound' in df.columns:
             summary['mean_compound'] = df['compound'].mean()

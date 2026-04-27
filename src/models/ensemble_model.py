@@ -5,42 +5,43 @@ Combines multiple models (ARIMA, LSTM, GRU) for more robust predictions.
 """
 
 import logging
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Any
 from pathlib import Path
 
 import pandas as pd
 import numpy as np
 
+from src.core.base import BaseModel
+
 logger = logging.getLogger(__name__)
 
 
-class EnsembleModel:
+class EnsembleModel(BaseModel):
     """Ensemble model combining multiple forecasting models."""
     
     def __init__(self, config: Optional[Dict] = None):
         """
         Initialize Ensemble model.
-        
+
         Args:
             config: Configuration dictionary
         """
-        self.config = config or {}
-        
+        super().__init__(config)
+
         # Model weights
         self.weights = self.config.get('weights', {
             'arima': 0.33,
             'lstm': 0.34,
             'gru': 0.33
         })
-        
+
         self.models = {}
-        self.is_fitted = False
-        
-        # FIX: Critical bug - store last sequence for LSTM/GRU predictions
+
+        # Store last sequence for LSTM/GRU predictions
         self.last_sequence = None
         self.sequence_length = self.config.get('sequence_length', 60)
         
-    def add_model(self, name: str, model: any, weight: Optional[float] = None) -> 'EnsembleModel':
+    def add_model(self, name: str, model: Any, weight: Optional[float] = None) -> 'EnsembleModel':
         """
         Add a model to the ensemble.
         
@@ -122,8 +123,12 @@ class EnsembleModel:
             self.last_sequence = data.iloc[-self.sequence_length:].reset_index(drop=True)
             logger.info(f"Stored last sequence of length {self.sequence_length} for predictions")
         else:
-            logger.warning(f"Data length {len(data)} is less than sequence_length {self.sequence_length}")
-            self.last_sequence = data
+            logger.warning(
+                f"Data length {len(data)} < sequence_length {self.sequence_length}. "
+                f"Padding to ensure prediction stability."
+            )
+            padding = pd.Series([data.iloc[0]] * (self.sequence_length - len(data)))
+            self.last_sequence = pd.concat([padding, data]).reset_index(drop=True)
         
         self.is_fitted = True
         
@@ -131,22 +136,35 @@ class EnsembleModel:
         
         return self
     
-    def predict(self, steps: int = 1) -> Dict:
+    def predict(self, steps: int = 1) -> np.ndarray:
         """
         Make ensemble predictions.
-        
+
         Args:
             steps: Number of steps to predict
-            
+
         Returns:
-            Dictionary with predictions and model predictions
+            Array of predictions
+        """
+        result = self._compute_ensemble(steps)
+        return result['predictions']
+
+    def _compute_ensemble(self, steps: int = 1) -> Dict:
+        """
+        Compute ensemble predictions with per-model details.
+
+        Args:
+            steps: Number of steps to predict
+
+        Returns:
+            Dictionary with 'predictions', 'details', 'weights'
         """
         if not self.is_fitted:
             raise ValueError("Models not fitted. Call fit() first.")
-            
+
         predictions = {}
         weights_used = {}
-        
+
         # ARIMA prediction
         if 'arima' in self.models and self.models['arima'].results is not None:
             try:
@@ -154,35 +172,32 @@ class EnsembleModel:
                 weights_used['arima'] = self.weights.get('arima', 0)
             except Exception as e:
                 logger.warning(f"ARIMA prediction failed: {e}")
-                
+
         # LSTM prediction
         if 'lstm' in self.models and self.models['lstm'].model is not None:
             try:
-                # FIX: Critical bug - now uses actual last sequence instead of dummy zeros
                 predictions['lstm'] = self.models['lstm'].predict_multiple(
                     self.last_sequence, steps
                 )
                 weights_used['lstm'] = self.weights.get('lstm', 0)
             except Exception as e:
                 logger.warning(f"LSTM prediction failed: {e}")
-                
+
         # GRU prediction
         if 'gru' in self.models and self.models['gru'].model is not None:
             try:
-                # FIX: Critical bug - now uses actual last sequence instead of dummy zeros
                 predictions['gru'] = self.models['gru'].predict_multiple(
                     self.last_sequence, steps
                 )
                 weights_used['gru'] = self.weights.get('gru', 0)
             except Exception as e:
                 logger.warning(f"GRU prediction failed: {e}")
-        
+
         # Normalize weights for available models
         total_weight = sum(weights_used.values())
         if total_weight > 0:
             weights_used = {k: v / total_weight for k, v in weights_used.items()}
         else:
-            # FIX: Raise exception instead of returning silent zeros
             error_msg = (
                 "No models available for prediction. All models failed during prediction. "
                 f"Attempted models: arima={bool(self.models.get('arima') and self.models['arima'].results is not None)}, "
@@ -191,13 +206,12 @@ class EnsembleModel:
             )
             logger.error(error_msg)
             raise RuntimeError(error_msg)
-        
+
         # Calculate weighted average
         ensemble_predictions = np.zeros(steps)
-        
         for model_name, preds in predictions.items():
             ensemble_predictions += weights_used[model_name] * preds
-            
+
         return {
             'predictions': ensemble_predictions,
             'details': predictions,
@@ -215,8 +229,8 @@ class EnsembleModel:
             Dictionary with predictions and confidence intervals
         """
         # Get individual predictions
-        prediction_result = self.predict(steps)
-        
+        prediction_result = self._compute_ensemble(steps)
+
         predictions = prediction_result['predictions']
         details = prediction_result.get('details', {})
         
@@ -259,7 +273,7 @@ class EnsembleModel:
         Returns:
             Dictionary with evaluation metrics
         """
-        predictions = self.predict(len(test_data))['predictions']
+        predictions = self._compute_ensemble(len(test_data))['predictions']
         
         from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
         
@@ -297,6 +311,14 @@ class EnsembleModel:
                 
         return summaries
     
+    def save_model(self, path: Path) -> None:
+        """Save ensemble model to file. Satisfies BaseModel ABC."""
+        self.save_models(path)
+
+    def load_model(self, path: Path) -> 'EnsembleModel':
+        """Load ensemble model from file. Satisfies BaseModel ABC."""
+        return self.load_models(path)
+
     def save_models(self, path: Path) -> None:
         """Save all models."""
         import joblib

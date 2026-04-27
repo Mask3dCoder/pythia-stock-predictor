@@ -45,8 +45,8 @@ class ModelMetadata:
     parent_version: Optional[str] = None
 
 
-class ModelRegistry:
-    """Registry for managing model versions."""
+class ModelVersionRegistry:
+    """Registry for managing model versions with persistence."""
     
     def __init__(self, models_dir: str = "models/registry"):
         self.models_dir = Path(models_dir)
@@ -287,4 +287,4 @@ class ModelRegistry:
             return False
 
 
-registry = ModelRegistry()
+version_registry = ModelVersionRegistry()

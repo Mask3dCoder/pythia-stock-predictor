@@ -193,7 +193,7 @@ class FundamentalAnalyzer:
         elif current_ratio and current_ratio > 1:
             piotroski += 0.5
 
-        if info.get('grossMargins', 0) > info.get('grossMargins', 0) * 0.9:
+        if info.get('grossMargins', 0) > 0:
             piotroski += 1
 
         scores['piotroski_f_score'] = min(9, int(piotroski))

@@ -54,7 +54,7 @@ class MarketBreadthAnalyzer:
             'put_call_ratio': self.get_put_call_ratio(),
             'vix_analysis': self.get_vix_analysis(),
             'percent_above_ma': self.get_percent_above_ma(),
-            ' Arms Index': self.get_arms_index(),
+            'Arms Index': self.get_arms_index(),
         }
 
     def get_ad_ratio(self, period: int = 20) -> Dict:
@@ -77,7 +77,8 @@ class MarketBreadthAnalyzer:
             adv = hist['Close'].diff().fillna(0) > 0
             dec = hist['Close'].diff().fillna(0) < 0
 
-            ad_ratio = adv.rolling(period).sum() / dec.rolling(period).sum()
+            dec_sum = dec.rolling(period).sum().replace(0, np.nan)
+            ad_ratio = adv.rolling(period).sum() / dec_sum
 
             current_ratio = ad_ratio.iloc[-1]
             avg_ratio = ad_ratio.mean()

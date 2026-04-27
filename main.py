@@ -1,23 +1,9 @@
 """
-Stock Prediction CLI - Main Entry Point
+Pythia Stock Prediction CLI — Main Entry Point
 
-Command-line interface for stock market prediction system.
-
-Phase 1 UX Enhancements:
-- Rich colored output with custom theme
-- Progress bars for long-running operations
-- Tables for structured data display
-- Robust input validation
-- Global exception handling with proper exit codes
-- Verbose/debug mode support
-
-Phase 2 CLI Enhancements (Current):
-- Comprehensive help text for all commands
-- Argument groups with clear separation
-- Detailed usage examples and epilog sections
-- Command aliases for quick access
-- Nested subparsers for grouped functionality
-- Informative metavars and proper formatting
+A polished command-line interface for stock market prediction:
+collect data, train models, generate forecasts, analyze sentiment,
+run backtests, and more.
 """
 
 import sys
@@ -31,7 +17,7 @@ import yaml
 import numpy as np
 from rich.table import Table
 
-# Import CLI modules
+# CLI modules — themed output and interactive mode
 from src.cli.output import (
     console,
     print_success,
@@ -46,6 +32,23 @@ from src.cli.output import (
     create_sentiment_table,
     create_progress,
     print_panel,
+    display_welcome_full,
+    display_error,
+)
+from src.cli.components import (
+    print_command_header,
+    print_section_header,
+    price_card,
+    metrics_grid,
+    metric_cards,
+    styled_table,
+    prediction_table as styled_prediction_table,
+    status_ok,
+    status_fail,
+    status_warn,
+    status_info,
+    result_panel,
+    success_panel,
 )
 from src.cli.validators import validate_all
 
@@ -68,9 +71,10 @@ def setup_logging(level: int = logging.INFO) -> None:
     # Configure logging
     logging.basicConfig(
         level=level,
+        force=True,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         handlers=[
-            logging.StreamHandler(sys.stdout),
+            logging.StreamHandler(sys.stderr),
             logging.FileHandler(logs_dir / "app.log"),
         ],
     )
@@ -97,47 +101,35 @@ def collect_data(args: argparse.Namespace, config: dict) -> Any:
     from src.data.collector import StockDataCollector
     from src.data.preprocessor import DataPreprocessor
 
-    print_header(f"Collecting Data for {args.symbol}")
+    print_command_header("Collect Stock Data", f"Symbol: {args.symbol}  |  Years: {args.years}")
 
-    # Initialize collector
     collector = StockDataCollector(config.get("data", {}))
     preprocessor = DataPreprocessor(config.get("indicators", {}))
 
-    # Download data with progress
-    print_info(f"Downloading {args.years} years of historical data...")
-
     with create_progress() as progress:
-        task = progress.add_task("Downloading data...", total=100)
-
+        task = progress.add_task(f"Downloading {args.years}y of {args.symbol} data...", total=100)
         data = collector.download_yahoo_data(symbol=args.symbol, years=args.years)
-
         progress.update(task, completed=50)
 
         if data.empty:
-            print_error(f"No data collected for {args.symbol}")
+            status_fail(f"No data collected for {args.symbol}")
             return None
 
-        # Preprocess data
-        print_info("Preprocessing data...")
+        progress.update(task, description="Preprocessing data...", completed=60)
         data = preprocessor.clean_data(data)
         data = preprocessor.add_all_indicators(data)
+        progress.update(task, completed=85)
 
-        progress.update(task, completed=80)
-
-        # Save data
         filepath = collector.save_data(data, args.symbol, "historical")
-
         progress.update(task, completed=100)
 
-    # Display summary in a nice table
-    data_info = {
-        "Total Records": len(data),
-        "Date Range": f"{data.index[0].date()} to {data.index[-1].date()}",
-        "Latest Close": data["close"].iloc[-1],
-    }
-
-    console.print(create_data_summary_table(data_info))
-    print_success(f"Data saved to {filepath}")
+    console.print()
+    console.print(create_data_summary_table({
+        "Records": len(data),
+        "Date Range": f"{data.index[0].date()} → {data.index[-1].date()}",
+        "Latest Close": f"${data['close'].iloc[-1]:,.2f}",
+    }, title=f"{args.symbol} Data Summary"))
+    status_ok(f"Saved to {filepath}")
 
     return data
 
@@ -146,40 +138,28 @@ def train_model(args: argparse.Namespace, config: dict) -> Any:
     """Train prediction model."""
     from src.models.predictor import StockPredictor
 
-    print_header(f"Training {args.model.title()} Model for {args.symbol}")
+    print_command_header("Train Model", f"Symbol: {args.symbol}  |  Model: {args.model.upper()}  |  Years: {args.years}")
 
-    # Create predictor
     predictor = StockPredictor(args.symbol, args.model, config)
 
-    # Load data
-    print_info("Loading data...")
-    predictor.load_data(years=args.years)
-
-    # Train model with progress
-    print_info(f"Training {args.model} model...")
-
     with create_progress() as progress:
-        task = progress.add_task("Training model...", total=100)
+        task = progress.add_task("Loading data...", total=100)
+        predictor.load_data(years=args.years)
+        progress.update(task, completed=30)
 
+        progress.update(task, description=f"Training {args.model.upper()} model...", completed=40)
         result = predictor.train()
-
         progress.update(task, completed=100)
 
-    # Display results
-    print_success("Training complete!")
-
-    training_info = {
+    console.print()
+    console.print(metrics_grid({
         "Model Type": result["model_type"],
         "Data Points": result["data_points"],
-    }
+    }, title="Training Results"))
 
-    table = create_data_summary_table(training_info)
-    console.print(table)
-
-    # Save model if requested
     if args.save:
         model_path = predictor.save_model()
-        print_success(f"Model saved to: {model_path}")
+        status_ok(f"Model saved to {model_path}")
 
     return predictor
 
@@ -188,62 +168,45 @@ def make_predictions(args: argparse.Namespace, config: dict) -> Tuple[Any, Any]:
     """Make stock predictions."""
     from src.models.predictor import StockPredictor
 
-    print_header(f"Making Predictions for {args.symbol}")
+    print_command_header("Generate Predictions", f"Symbol: {args.symbol}  |  Model: {args.model.upper()}  |  Horizon: {args.days} days")
 
-    # Create predictor
     predictor = StockPredictor(args.symbol, args.model, config)
-
-    # Load data with progress
-    print_info("Loading data...")
 
     with create_progress() as progress:
         task = progress.add_task("Loading and training...", total=100)
-
         predictor.load_data(years=args.years)
-        progress.update(task, completed=40)
+        progress.update(task, completed=35)
 
-        print_info("Training model...")
+        progress.update(task, description="Training model...", completed=45)
         predictor.train()
-        progress.update(task, completed=80)
+        progress.update(task, completed=70)
 
-        # Make predictions
-        print_info(f"Making predictions for next {args.days} days...")
+        progress.update(task, description=f"Generating {args.days}-day forecast...", completed=80)
         predictions = predictor.predict(args.days)
-
         progress.update(task, completed=100)
 
-    # Display predictions in a table
-    lower_bound = predictions.get("lower_bound", predictions["predictions"])
-    upper_bound = predictions.get("upper_bound", predictions["predictions"])
+    preds = predictions.get("predictions", [])
+    lower_bound = predictions.get("lower_bound", preds)
+    upper_bound = predictions.get("upper_bound", preds)
 
-    table = create_predictions_table(
-        predictions=predictions["predictions"].tolist()
-        if hasattr(predictions["predictions"], "tolist")
-        else list(predictions["predictions"]),
-        lower_bound=lower_bound.tolist()
-        if hasattr(lower_bound, "tolist")
-        else list(lower_bound),
-        upper_bound=upper_bound.tolist()
-        if hasattr(upper_bound, "tolist")
-        else list(upper_bound),
-        title=f"Stock Predictions for {args.symbol}",
-    )
-    console.print(table)
+    pred_list = preds.tolist() if hasattr(preds, "tolist") else list(preds)
+    low_list = lower_bound.tolist() if hasattr(lower_bound, "tolist") else list(lower_bound)
+    high_list = upper_bound.tolist() if hasattr(upper_bound, "tolist") else list(upper_bound)
 
-    # Current price and change
+    console.print()
+    console.print(styled_prediction_table(
+        predictions=pred_list,
+        lower_bound=low_list,
+        upper_bound=high_list,
+        title=f"{args.symbol} — {args.days}-Day Forecast",
+    ))
+
     current = predictor.get_current_price()
     if current:
-        pred = predictions["predictions"][0]
-        change = pred - current
-        change_pct = (change / current) * 100
-
-        # Display as panel
-        price_info = f"""
-[cyan]Current Price:[/cyan]     [green]${current:.2f}[/green]
-[cyan]Next Day Prediction:[/cyan] [green]${pred:.2f}[/green]
-[cyan]Change:[/cyan]            [green]{change:+.2f} ({change_pct:+.2f}%)[/green]
-        """
-        print_panel(price_info.strip(), title="Price Summary", style="green")
+        pred = pred_list[0]
+        change_pct = ((pred - current) / current) * 100
+        console.print()
+        console.print(price_card(current, pred, change_pct))
 
     return predictor, predictions
 
@@ -258,7 +221,7 @@ def run_dashboard(args: argparse.Namespace, config: dict) -> None:
     print_info("Starting Streamlit dashboard...")
     print_info("If the dashboard doesn't open automatically, run:")
     console.print("  [cyan]streamlit run src/visualization/dashboard.py[/cyan]")
-    print(
+    console.print(
         "\nOr open [link=http://localhost:8501]http://localhost:8501[/link] in your browser"
     )
 
@@ -271,73 +234,61 @@ def analyze_sentiment(args: argparse.Namespace, config: dict) -> None:
     """Analyze sentiment from news/text."""
     from src.sentiment.analyzer import SentimentAnalyzer
 
-    print_header("Analyzing Sentiment")
+    print_command_header("Sentiment Analysis", f"Method: {args.method.upper()}")
 
-    # Sample texts (in real usage, would fetch from news sources)
-    sample_texts = [
-        "Stock market reaches all-time high amid positive economic data",
-        "Company reports strong quarterly earnings, beating expectations",
-        "Market faces uncertainty due to geopolitical concerns",
-        "Analysts downgrade stock rating citing slowdown risks",
-        "CEO announces strategic partnership, investors react positively",
-    ]
+    if hasattr(args, 'text') and args.text:
+        texts = [args.text]
+    else:
+        texts = [
+            "Stock market reaches all-time high amid positive economic data",
+            "Company reports strong quarterly earnings, beating expectations",
+            "Market faces uncertainty due to geopolitical concerns",
+            "Analysts downgrade stock rating citing slowdown risks",
+            "CEO announces strategic partnership, investors react positively",
+        ]
 
-    # Initialize analyzer
     analyzer = SentimentAnalyzer(config.get("sentiment", {}))
 
-    # Analyze with progress
-    print_info(f"Analyzing {len(sample_texts)} sample texts...")
-
     with create_progress() as progress:
-        task = progress.add_task("Analyzing sentiment...", total=len(sample_texts))
-        results = analyzer.analyze_batch(sample_texts, method=args.method)
+        task = progress.add_task(f"Analyzing {len(texts)} texts...", total=len(texts))
+        results = analyzer.analyze_batch(texts, method=args.method)
         progress.update(task, completed=100)
 
-    # Display results in a table
-    table = create_sentiment_table(results)
-    console.print(table)
+    console.print()
+    console.print(create_sentiment_table(results))
 
-    # Summary
     summary = analyzer.get_sentiment_summary(results)
-
-    summary_text = f"""
-[green]Positive:[/green] {summary.get("positive_pct", 0):.1f}%
-[yellow]Neutral:[/yellow]  {summary.get("neutral_pct", 0):.1f}%
-[red]Negative:[/red]  {summary.get("negative_pct", 0):.1f}%
-    """
-    print_panel(summary_text.strip(), title="Sentiment Summary", style="cyan")
+    console.print()
+    console.print(success_panel(
+        f"{summary.get('positive_pct', 0):.1f}% Positive  |  "
+        f"{summary.get('neutral_pct', 0):.1f}% Neutral  |  "
+        f"{summary.get('negative_pct', 0):.1f}% Negative",
+        title="Sentiment Breakdown",
+    ))
 
 
 def evaluate_model(args: argparse.Namespace, config: dict) -> None:
     """Evaluate trained model."""
     from src.models.predictor import StockPredictor
 
-    print_header(f"Evaluating {args.model.title()} Model for {args.symbol}")
+    print_command_header("Evaluate Model", f"Symbol: {args.symbol}  |  Model: {args.model.upper()}")
 
-    # Create predictor
     predictor = StockPredictor(args.symbol, args.model, config)
 
-    # Load data with progress
-    print_info("Loading data...")
-
     with create_progress() as progress:
-        task = progress.add_task("Loading and evaluating...", total=100)
-
+        task = progress.add_task("Loading data...", total=100)
         predictor.load_data(years=args.years)
         progress.update(task, completed=30)
-
-        print_info("Training model...")
+        progress.update(task, description="Training model...", completed=40)
         predictor.train()
         progress.update(task, completed=60)
-
-        # Evaluate
-        print_info("Evaluating model...")
+        progress.update(task, description="Evaluating...", completed=70)
         metrics = predictor.evaluate()
         progress.update(task, completed=100)
 
-    # Display metrics in a table
-    table = create_metrics_table(metrics, title=f"Model Evaluation: {args.symbol}")
-    console.print(table)
+    console.print()
+    console.print(metrics_grid(metrics, title=f"{args.symbol} — {args.model.upper()} Performance"))
+    console.print()
 
 
 def run_backtest(args: argparse.Namespace, config: dict) -> None:
@@ -345,19 +296,16 @@ def run_backtest(args: argparse.Namespace, config: dict) -> None:
     from src.models.predictor import StockPredictor
     from src.backtest.engine import BacktestEngine, TransactionCosts
 
-    print_header(f"Backtesting {args.model.title()} Model for {args.symbol}")
+    print_command_header("Run Backtest", f"Symbol: {args.symbol}  |  Model: {args.model.upper()}  |  Capital: ${args.capital:,.0f}")
 
-    # Initialize components
     predictor = StockPredictor(args.symbol, args.model, config)
 
-    # Setup transaction costs
     costs = TransactionCosts(
         commission_pct=args.commission,
         slippage_pct=args.slippage,
         spread_pct=args.spread,
     )
 
-    # Create backtest engine
     engine = BacktestEngine(
         initial_capital=args.capital,
         transaction_costs=costs,
@@ -366,43 +314,47 @@ def run_backtest(args: argparse.Namespace, config: dict) -> None:
         allow_shorting=args.allow_short,
     )
 
-    # Load and train
-    print_info("Loading data...")
-    predictor.load_data(years=args.years)
+    with create_progress() as progress:
+        task = progress.add_task("Loading data...", total=100)
+        predictor.load_data(years=args.years)
+        progress.update(task, completed=20)
 
-    print_info("Training model...")
-    predictor.train()
+        progress.update(task, description="Training model...", completed=30)
+        predictor.train()
+        progress.update(task, completed=50)
 
-    # Get predictions for signal generation
-    print_info("Generating trading signals...")
-    data = predictor.data.dropna()
-    predictions = predictor.predict(len(data))
-    pred_values = predictions["predictions"]
+        if predictor.data is None:
+            status_fail("No data loaded for backtesting")
+            return
+        data = predictor.data.dropna()
 
-    # Generate signals based on prediction direction
-    actual_prices = data["close"].values[-len(pred_values) :]
-    signals = np.sign(pred_values - actual_prices)
+        progress.update(task, description="Generating signals...", completed=60)
+        predictions = predictor.predict(len(data))
+        pred_values = predictions["predictions"]
+        actual_prices = data["close"].values[-len(pred_values):]
+        signals = np.sign(pred_values - actual_prices)
 
-    # Run backtest
-    print_info("Running backtest...")
-    prices = data["close"]
-    results = engine.run(prices, signals)
+        progress.update(task, description="Running backtest simulation...", completed=75)
+        prices = data["close"]
+        results = engine.run(prices, signals)
+        progress.update(task, completed=100)
 
-    # Display results
-    print_success("Backtest Complete!")
+    if not results:
+        status_fail("Backtest produced no results")
+        return
 
-    backtest_info = {
-        "Total Return": f"{results['total_return'] * 100:.2f}%",
-        "Annual Return": f"{results['annual_return'] * 100:.2f}%",
+    console.print()
+    total_ret = results.get('total_return', 0) * 100
+    console.print(metrics_grid({
+        "Total Return": f"{total_ret:+.2f}%",
+        "Annual Return": f"{results.get('annual_return', 0) * 100:+.2f}%",
         "Sharpe Ratio": f"{results.get('sharpe_ratio', 0):.2f}",
-        "Max Drawdown": f"{results['max_drawdown'] * 100:.2f}%",
+        "Max Drawdown": f"{results.get('max_drawdown', 0) * 100:.2f}%",
         "Win Rate": f"{results.get('win_rate', 0) * 100:.1f}%",
-        "Total Trades": results["total_trades"],
-        "Final Capital": f"${results['final_capital']:,.2f}",
-    }
-
-    table = create_data_summary_table(backtest_info, title="Backtest Results")
-    console.print(table)
+        "Total Trades": results.get("total_trades", 0),
+        "Final Capital": f"${results.get('final_capital', 0):,.2f}",
+    }, title=f"Backtest Results — {args.symbol}"))
+    console.print()
 
 
 def run_optimize(args: argparse.Namespace, config: dict) -> None:
@@ -410,7 +362,7 @@ def run_optimize(args: argparse.Namespace, config: dict) -> None:
     from src.optimization.hyperopt import HyperparameterOptimizer
     from src.data.collector import StockDataCollector
 
-    print_header(f"Optimizing {args.model.title()} Model for {args.symbol}")
+    print_header(f"Optimizing {args.model.upper()} Model for {args.symbol}")
 
     # Collect data
     print_info("Collecting data...")
@@ -426,7 +378,7 @@ def run_optimize(args: argparse.Namespace, config: dict) -> None:
         data = preprocessor.add_all_indicators(data)
 
         # Create sequences
-        close_prices = data["close"].fillna(method="ffill").values
+        close_prices = data["close"].ffill().values
         seq_len = args.sequence_length
 
         X, y = [], []
@@ -441,9 +393,7 @@ def run_optimize(args: argparse.Namespace, config: dict) -> None:
         optimizer = HyperparameterOptimizer(n_trials=args.trials)
 
         print_info(f"Running {args.trials} optimization trials...")
-
-        if args.model == "lstm":
-            results = optimizer.optimize_lstm(X, y, epochs=args.epochs)
+        results = optimizer.optimize_lstm(X, y, epochs=args.epochs)
 
         print_success("Optimization Complete!")
 
@@ -473,40 +423,55 @@ def run_validate(args: argparse.Namespace, config: dict) -> None:
     predictor.load_data(years=args.years)
 
     # Get data for validation
+    if predictor.data is None:
+        print_error("No data loaded for validation")
+        return
     data = predictor.data.dropna()
-    close_prices = data["close"].values
+    close_prices = data["close"]
 
-    # Create simple features (price sequences)
+    # Create simple features (price sequences) for walk-forward
     seq_len = 60
     X, y = [], []
     for i in range(len(close_prices) - seq_len):
-        X.append(close_prices[i : i + seq_len])
-        y.append(close_prices[i + seq_len])
+        X.append(close_prices.iloc[i : i + seq_len].values)
+        y.append(close_prices.iloc[i + seq_len])
 
     X = np.array(X)
     y = np.array(y)
 
-    # Run validation
+    # Run walk-forward validation using sklearn-compatible linear model
     print_info("Running walk-forward validation...")
 
     validator = WalkForwardValidator(
         train_size=args.train_size, test_size=args.test_size
     )
 
-    # For simplicity, just evaluate with simple predictions
     from sklearn.linear_model import LinearRegression
 
-    model = LinearRegression()
-    results = validator.evaluate(model, X, y, verbose=False)
+    wf_model = LinearRegression()
+    results = validator.evaluate(wf_model, X, y, verbose=False)
+
+    # Also train and evaluate the specified model
+    print_info(f"Training {args.model} model for model-specific metrics...")
+    try:
+        predictor.train()
+        model_metrics = predictor.evaluate()
+    except Exception as e:
+        print_warning(f"Could not train {args.model} model: {e}")
+        model_metrics = {}
 
     print_success("Validation Complete!")
 
     val_info = {
-        "Number of Folds": results.get("n_folds", 0),
-        "Avg MAE": f"{results['metrics'].get('mae', {}).get('mean', 0):.4f}",
-        "Avg RMSE": f"{results['metrics'].get('rmse', {}).get('mean', 0):.4f}",
-        "Avg R2": f"{results['metrics'].get('r2', {}).get('mean', 0):.4f}",
+        "Walk-Forward Folds": results.get("n_folds", 0),
+        "WF Avg MAE": f"{results['metrics'].get('mae', {}).get('mean', 0):.4f}",
+        "WF Avg RMSE": f"{results['metrics'].get('rmse', {}).get('mean', 0):.4f}",
+        "WF Avg R2": f"{results['metrics'].get('r2', {}).get('mean', 0):.4f}",
     }
+    if model_metrics:
+        val_info["Model MAE"] = f"{model_metrics.get('mae', 0):.4f}"
+        val_info["Model RMSE"] = f"{model_metrics.get('rmse', 0):.4f}"
+        val_info["Model R2"] = f"{model_metrics.get('r2', 0):.4f}"
 
     table = create_data_summary_table(val_info, title="Validation Results")
     console.print(table)
@@ -517,11 +482,12 @@ def run_batch(args: argparse.Namespace, config: dict) -> None:
     from src.models.predictor import StockPredictor
     from src.data.collector import StockDataCollector
 
-    print_header(f"Batch Processing: {', '.join(args.symbols)}")
+    symbols = [s.strip() for s in args.symbols.split(",")]
+    print_header(f"Batch Processing: {', '.join(symbols)}")
 
     results = []
 
-    for symbol in args.symbols:
+    for symbol in symbols:
         print_info(f"\nProcessing {symbol}...")
 
         try:
@@ -574,55 +540,36 @@ def run_uncertainty(args: argparse.Namespace, config: dict) -> None:
     """Get predictions with uncertainty intervals."""
     from src.models.predictor import StockPredictor
 
-    print_header(f"Prediction with Uncertainty for {args.symbol}")
+    print_command_header("Uncertainty Analysis", f"Symbol: {args.symbol}  |  Model: {args.model.upper()}  |  Horizon: {args.days} days")
 
-    # Initialize predictor
     predictor = StockPredictor(args.symbol, args.model, config)
 
-    # Load and train
-    print_info("Loading and training...")
-    predictor.load_data(years=args.years)
-    predictor.train()
+    with create_progress() as progress:
+        task = progress.add_task("Loading and training...", total=100)
+        predictor.load_data(years=args.years)
+        progress.update(task, completed=30)
+        predictor.train()
+        progress.update(task, completed=60)
 
-    # Make predictions with confidence
-    print_info(f"Generating {args.samples} Monte Carlo samples...")
+        if predictor.data is None:
+            status_fail("No data loaded")
+            return
 
-    # Get the last sequence for prediction
-    data = predictor.data.dropna()
-    close = data["close"].values
+        progress.update(task, description="Generating confidence intervals...", completed=75)
+        predictions = predictor.predict(args.days, include_confidence=True)
+        progress.update(task, completed=100)
 
-    # Simple ensemble variance for uncertainty
-    predictions = predictor.predict(args.days)
     pred_values = predictions["predictions"]
+    lower = predictions.get("lower_bound", pred_values * 0.95)
+    upper = predictions.get("upper_bound", pred_values * 1.05)
 
-    # Generate simple confidence intervals (spread of predictions from ensemble if available)
-    # Otherwise use percentage-based bounds
-    uncertainty_pct = 0.05  # 5% uncertainty
-
-    lower = pred_values * (1 - uncertainty_pct)
-    upper = pred_values * (1 + uncertainty_pct)
-
-    # Display results
-    print_success("Predictions with Uncertainty")
-
-    table = Table(title="Price Predictions with 95% Confidence")
-    table.add_column("Day", style="cyan")
-    table.add_column("Prediction", style="green", justify="right")
-    table.add_column("Lower Bound", style="yellow", justify="right")
-    table.add_column("Upper Bound", style="red", justify="right")
-    table.add_column("Uncertainty", style="magenta", justify="right")
-
-    for i in range(min(len(pred_values), args.days)):
-        uncertainty = (upper[i] - lower[i]) / 2
-        table.add_row(
-            str(i + 1),
-            f"${pred_values[i]:.2f}",
-            f"${lower[i]:.2f}",
-            f"${upper[i]:.2f}",
-            f"±${uncertainty:.2f}",
-        )
-
-    console.print(table)
+    console.print()
+    console.print(styled_prediction_table(
+        predictions=pred_values.tolist() if hasattr(pred_values, "tolist") else list(pred_values),
+        lower_bound=lower.tolist() if hasattr(lower, "tolist") else list(lower),
+        upper_bound=upper.tolist() if hasattr(upper, "tolist") else list(upper),
+        title=f"{args.symbol} — Forecast with 95% Confidence",
+    ))
 
 
 def run_risk(args: argparse.Namespace, config: dict) -> None:
@@ -630,20 +577,15 @@ def run_risk(args: argparse.Namespace, config: dict) -> None:
     from src.backtest.risk_manager import RiskManager
     from src.data.collector import StockDataCollector
 
-    print_header(f"Risk Analysis for {args.symbol}")
+    print_command_header("Risk Analysis", f"Symbol: {args.symbol}  |  Capital: ${args.capital:,.0f}")
 
-    # Get current data
     collector = StockDataCollector(config.get("data", {}))
     data = collector.download_yahoo_data(args.symbol, years=1)
 
-    # Calculate volatility
     returns = data["close"].pct_change().dropna()
     volatility = returns.std() * np.sqrt(252)
-
-    # Get current price
     current_price = data["close"].iloc[-1]
 
-    # Calculate risk metrics
     risk_mgr = RiskManager(
         max_position_pct=args.max_position / 100, use_kelly=args.use_kelly
     )
@@ -655,11 +597,11 @@ def run_risk(args: argparse.Namespace, config: dict) -> None:
         historical_returns=returns,
     )
 
-    # Display results
-    print_success("Risk Analysis Complete")
+    console.print()
 
-    risk_info = {
-        "Current Price": f"${current_price:.2f}",
+    # Display key metrics as cards
+    console.print(metrics_grid({
+        "Current Price": f"${current_price:,.2f}",
         "Annual Volatility": f"{volatility * 100:.2f}%",
         "Position Size": f"{risk.position_size} shares",
         "Position Value": f"${risk.position_size * current_price:,.2f}",
@@ -667,66 +609,51 @@ def run_risk(args: argparse.Namespace, config: dict) -> None:
         "Take Profit": f"{risk.take_profit * 100:.2f}%",
         "Kelly Fraction": f"{risk.kelly_fraction * 100:.1f}%",
         "Confidence": f"{risk.confidence * 100:.1f}%",
-    }
+    }, title=f"Risk Metrics — {args.symbol}"))
 
-    table = create_data_summary_table(risk_info, title="Risk Metrics")
-    console.print(table)
+    console.print()
 
 
 def compare_models(args: argparse.Namespace, config: dict) -> None:
     """Compare multiple models."""
     from src.models.predictor import StockPredictor
 
-    print_header(f"Comparing Models for {args.symbol}")
+    print_command_header("Model Comparison", f"Symbol: {args.symbol}  |  Years: {args.years}")
 
     models = (
         args.models.split(",") if args.models else ["arima", "lstm", "gru", "ensemble"]
     )
 
     results = []
-
     for model_type in models:
-        print_info(f"\nEvaluating {model_type}...")
+        model_type = model_type.strip()
+        status_info(f"Evaluating {model_type}...")
 
         try:
-            predictor = StockPredictor(args.symbol, model_type.strip(), config)
+            predictor = StockPredictor(args.symbol, model_type, config)
             predictor.load_data(years=args.years)
             predictor.train()
-
             metrics = predictor.evaluate()
-
-            results.append(
-                {
-                    "model": model_type.strip(),
-                    "mae": metrics.get("mae", 0),
-                    "rmse": metrics.get("rmse", 0),
-                    "mape": metrics.get("mape", 0),
-                    "r2": metrics.get("r2", 0),
-                }
-            )
+            results.append({
+                "Model": model_type.upper(),
+                "MAE": metrics.get("mae", 0),
+                "RMSE": metrics.get("rmse", 0),
+                "MAPE": f"{metrics.get('mape', 0):.2f}%",
+                "R²": metrics.get("r2", 0),
+            })
         except Exception as e:
-            print_warning(f"Failed to evaluate {model_type}: {e}")
+            status_warn(f"Skipping {model_type}: {e}")
 
-    # Display comparison
-    print_success("\nModel Comparison Complete")
+    if not results:
+        status_fail("No models could be evaluated")
+        return
 
-    table = Table(title="Model Comparison")
-    table.add_column("Model", style="cyan")
-    table.add_column("MAE", style="yellow", justify="right")
-    table.add_column("RMSE", style="yellow", justify="right")
-    table.add_column("MAPE", style="yellow", justify="right")
-    table.add_column("R2", style="green", justify="right")
-
-    for r in results:
-        table.add_row(
-            r["model"],
-            f"{r['mae']:.4f}",
-            f"{r['rmse']:.4f}",
-            f"{r['mape']:.2f}%",
-            f"{r['r2']:.4f}",
-        )
-
-    console.print(table)
+    console.print()
+    # Build rows for styled table
+    columns = ["Model", "MAE", "RMSE", "MAPE", "R²"]
+    rows = [[r[c] for c in columns] for r in results]
+    console.print(styled_table(columns, rows, title=f"Model Comparison — {args.symbol}"))
+    console.print()
 
 
 # ============== Argument Parser Setup ==============
@@ -1571,212 +1498,14 @@ def create_parser() -> argparse.ArgumentParser:
 
 
 def run_interactive(config: dict) -> int:
-    """Run CLI in interactive mode with guided prompts."""
-    from src.cli.output import print_header, print_success, print_error, print_info
+    """Run CLI in interactive mode — delegates to Rich-powered interactive module."""
+    from src.cli.interactive import run_interactive as _run
 
-    print_header("Welcome to Pythia Stock Predictor - Interactive Mode")
-    print_info("This guided mode will help you through the prediction workflow.\n")
-
-    # Step 1: Choose action
-    print_info("Available actions:")
-    print_info("  1. Collect data - Download historical stock data")
-    print_info("  2. Train model - Train a prediction model")
-    print_info("  3. Make predictions - Generate price predictions")
-    print_info("  4. Run dashboard - Launch the visualization dashboard")
-    print_info("  5. Analyze sentiment - Analyze market sentiment")
-    print_info("  6. Run backtesting - Test trading strategies")
-    print_info("  7. Optimize hyperparameters - Bayesian optimization")
-    print_info("  8. Validate model - Walk-forward validation")
-    print_info("  9. Risk analysis - Position sizing")
-    print_info(" 10. Compare models - Benchmark multiple models")
-    print_info(" 11. Full workflow - Complete prediction pipeline")
-    print_info("  0. Exit - Exit interactive mode\n")
-
-    while True:
-        try:
-            choice = input("Enter your choice (0-6): ").strip()
-
-            if choice == "0":
-                print_info("Exiting interactive mode. Goodbye!")
-                return 0
-
-            elif choice == "1":
-                # Collect data
-                symbol = input("Enter stock symbol (e.g., AAPL): ").strip().upper()
-                years = input("Enter number of years of data [1-10]: ").strip() or "5"
-
-                # Create mock args namespace
-                class Args:
-                    pass
-
-                args = Args()
-                args.symbol = symbol
-                args.years = int(years)
-                args.source = "yfinance"
-                args.interactive = True
-
-                collect_data(args, config)
-
-            elif choice == "2":
-                # Train model
-                symbol = input("Enter stock symbol (e.g., AAPL): ").strip().upper()
-                model = (
-                    input("Enter model type [arima/lstm/gru/ensemble]: ")
-                    .strip()
-                    .lower()
-                    or "ensemble"
-                )
-
-                class Args:
-                    pass
-
-                args = Args()
-                args.symbol = symbol
-                args.model = model
-                args.epochs = 50
-                args.save = True
-                args.interactive = True
-
-                train_model(args, config)
-
-            elif choice == "3":
-                # Make predictions
-                symbol = input("Enter stock symbol (e.g., AAPL): ").strip().upper()
-                model = (
-                    input("Enter model type [arima/lstm/gru/ensemble]: ")
-                    .strip()
-                    .lower()
-                    or "ensemble"
-                )
-                days = input("Enter number of days to predict [1-90]: ").strip() or "7"
-
-                class Args:
-                    pass
-
-                args = Args()
-                args.symbol = symbol
-                args.model = model
-                args.days = int(days)
-                args.interactive = True
-
-                make_predictions(args, config)
-
-            elif choice == "4":
-                # Run dashboard
-                symbol = input("Enter stock symbol (e.g., AAPL): ").strip().upper()
-
-                class Args:
-                    pass
-
-                args = Args()
-                args.symbol = symbol
-                args.model = "ensemble"
-                args.port = 8501
-                args.interactive = True
-
-                run_dashboard(args, config)
-
-            elif choice == "5":
-                # Sentiment analysis
-                text = input(
-                    "Enter text to analyze (or press Enter for sample): "
-                ).strip()
-                if not text:
-                    text = "Stock market shows positive trends today with strong tech sector performance."
-
-                class Args:
-                    pass
-
-                args = Args()
-                args.text = text
-                args.method = "vader"
-                args.interactive = True
-
-                analyze_sentiment(args, config)
-
-            elif choice == "6":
-                # Full workflow
-                symbol = input("Enter stock symbol (e.g., AAPL): ").strip().upper()
-                years = input("Enter number of years of data [1-10]: ").strip() or "5"
-                model = (
-                    input("Enter model type [arima/lstm/gru/ensemble]: ")
-                    .strip()
-                    .lower()
-                    or "ensemble"
-                )
-                days = input("Enter number of days to predict [1-90]: ").strip() or "7"
-
-                print_info("\n" + "=" * 50)
-                print_header(f"Starting Full Workflow for {symbol}")
-                print_info("=" * 50 + "\n")
-
-                # Step 1: Collect
-                print_info("Step 1/3: Collecting data...")
-
-                class Args1:
-                    pass
-
-                args1 = Args1()
-                args1.symbol = symbol
-                args1.years = int(years)
-                args1.source = "yfinance"
-                args1.interactive = True
-                collect_data(args1, config)
-
-                # Step 2: Train
-                print_info("Step 2/3: Training model...")
-
-                class Args2:
-                    pass
-
-                args2 = Args2()
-                args2.symbol = symbol
-                args2.model = model
-                args2.epochs = 50
-                args2.save = True
-                args2.interactive = True
-                train_model(args2, config)
-
-                # Step 3: Predict
-                print_info("Step 3/3: Making predictions...")
-
-                class Args3:
-                    pass
-
-                args3 = Args3()
-                args3.symbol = symbol
-                args3.model = model
-                args3.days = int(days)
-                args3.interactive = True
-                make_predictions(args3, config)
-
-                print_success("\nFull workflow completed!")
-
-            else:
-                print_error("Invalid choice. Please enter a number between 0 and 6.")
-                continue
-
-            # Ask if user wants to continue
-            print_info("\n" + "-" * 50)
-            continue_choice = (
-                input("Would you like to perform another action? (y/n): ")
-                .strip()
-                .lower()
-            )
-            if continue_choice not in ("y", "yes"):
-                print_info("Exiting interactive mode. Goodbye!")
-                return 0
-
-        except KeyboardInterrupt:
-            print_info("\n\nOperation cancelled. Exiting interactive mode.")
-            return 130
-        except Exception as e:
-            print_error(f"Error: {e}")
-            print_info("Please try again.")
+    return _run(config)
 
 
 def main() -> int:
-    """Main entry point."""
+    """Main entry point for Pythia Stock Prediction CLI."""
     global VERBOSE_MODE
 
     # Setup basic logging first
@@ -1786,24 +1515,21 @@ def main() -> int:
     parser = create_parser()
     args = parser.parse_args()
 
-    # Handle interactive mode
+    # Handle interactive mode — delegates to new Rich-powered module
     if args.interactive:
-        print_welcome()
         config = load_config(args.config)
         return run_interactive(config)
 
-    # Show welcome message if no command
+    # Show welcome screen if no command given
     if args.command is None:
-        print_welcome()
-        parser.print_help()
-        print_info("\nTip: Use --interactive or -i for guided mode!")
+        display_welcome_full()
         return 0
 
     # Handle verbose mode
     VERBOSE_MODE = args.verbose
     if VERBOSE_MODE:
-        setup_logging(logging.DEBUG)
-        print_info("Verbose mode enabled")
+        logging.getLogger().setLevel(logging.DEBUG)
+        status_info("Verbose mode enabled")
 
     # Load configuration
     config = load_config(args.config)
@@ -1811,54 +1537,61 @@ def main() -> int:
     # Validate inputs
     is_valid, errors = validate_all(args)
     if not is_valid:
-        print_error("Validation failed:")
-        for error in errors:
-            console.print(f"  * {error}")
-        return 2  # Exit code 2 for validation errors
+        display_error(
+            "Invalid arguments",
+            "Check the following and try again:\n  " + "\n  ".join(errors),
+        )
+        return 2
 
-    # Execute command with exception handling
+    # Execute command with structured error handling
     try:
-        # Call the appropriate function
         if hasattr(args, "func"):
             args.func(args, config)
 
-        print_success("Command completed successfully!")
+        console.print()
+        status_ok("Command completed successfully")
         return 0
 
     except KeyboardInterrupt:
-        print_warning("\nOperation cancelled by user")
-        return 130  # Standard exit code for SIGINT
+        console.print()
+        status_warn("Operation cancelled by user")
+        return 130
 
     except FileNotFoundError as e:
-        print_error(f"File not found: {e}")
-        if VERBOSE_MODE:
-            import traceback
-
-            console.print(traceback.format_exc())
-        return 3  # Exit code 3 for file errors
-
-    except ValueError as e:
-        print_error(f"Invalid value: {e}")
-        if VERBOSE_MODE:
-            import traceback
-
-            console.print(traceback.format_exc())
-        return 4  # Exit code 4 for validation/value errors
-
-    except ImportError as e:
-        print_error(f"Import error: {e}")
-        print_info("Check that all required dependencies are installed.")
-        if VERBOSE_MODE:
-            import traceback
-
-            console.print(traceback.format_exc())
-        return 5  # Exit code 5 for import errors
-
-    except Exception as e:
-        print_error(f"Unexpected error: {e}")
+        display_error(
+            "File not found",
+            f"{e}\n\nCheck that the file exists and the path is correct.",
+        )
         if VERBOSE_MODE:
             console.print_exception()
-        return 1  # Exit code 1 for general errors
+        return 3
+
+    except ValueError as e:
+        display_error(
+            "Invalid value",
+            f"{e}\n\nCheck your input and try again.",
+        )
+        if VERBOSE_MODE:
+            console.print_exception()
+        return 4
+
+    except ImportError as e:
+        display_error(
+            "Missing dependency",
+            f"{e}\n\nInstall required packages with:\n  pip install -r requirements.txt",
+        )
+        if VERBOSE_MODE:
+            console.print_exception()
+        return 5
+
+    except Exception as e:
+        display_error(
+            "Unexpected error",
+            f"{e}\n\nRun with --verbose for full traceback.",
+        )
+        if VERBOSE_MODE:
+            console.print_exception()
+        return 1
 
 
 if __name__ == "__main__":

@@ -253,7 +253,7 @@ class DataCache:
     
     def _get_cache_key(self, symbol: str, years: int, start_date: Optional[str] = None) -> str:
         """Generate cache key for data."""
-        key_str = f"{symbol}_{years}_{start_date}_{datetime.now().date()}"
+        key_str = f"{symbol}_{years}_{start_date}"
         return hashlib.md5(key_str.encode()).hexdigest()
     
     def get(self, symbol: str, years: int, start_date: Optional[str] = None) -> Optional[pd.DataFrame]:

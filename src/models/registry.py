@@ -182,7 +182,7 @@ def create_model(name: str, config: Optional[Dict[str, Any]] = None, **kwargs):
 def _register_builtin_models():
     """Register all built-in models."""
     from src.models.arima_model import ARIMAModel
-    from src.models.lstm_model import LSTMModel
+    from src.models.lstm_model import LSTMModel, GRUModel
     from src.models.ensemble_model import EnsembleModel
     
     ModelRegistry.register('arima', ARIMAModel, {
@@ -197,7 +197,7 @@ def _register_builtin_models():
         'epochs': 50
     })
     
-    ModelRegistry.register('gru', LSTMModel, {
+    ModelRegistry.register('gru', GRUModel, {
         'sequence_length': 60,
         'lstm_units': [50, 50],
         'dropout': 0.2,
@@ -214,5 +214,5 @@ def _register_builtin_models():
 # Auto-register models on import
 try:
     _register_builtin_models()
-except ImportError:
-    pass
+except ImportError as e:
+    logger.warning(f"Could not register builtin models: {e}")

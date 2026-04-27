@@ -8,7 +8,7 @@ Implements:
 """
 
 import logging
-from typing import Optional, Dict, List, Tuple
+from typing import Optional, Dict, List, Tuple, Any
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -44,7 +44,7 @@ class MonteCarloDropout(UncertaintyEstimator):
     
     def __init__(
         self,
-        model: any,
+        model: Any,
         n_samples: int = 100,
         dropout_rate: float = 0.1
     ):
@@ -293,7 +293,7 @@ class ConformalPrediction:
         
     def fit(
         self,
-        model: any,
+        model: Any,
         X: np.ndarray,
         y: np.ndarray
     ) -> 'ConformalPrediction':
@@ -337,7 +337,7 @@ class ConformalPrediction:
     
     def predict_intervals(
         self,
-        model: any,
+        model: Any,
         X: np.ndarray
     ) -> Dict[str, np.ndarray]:
         """
